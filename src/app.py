@@ -1,13 +1,14 @@
+import os
 import sys
 import tempfile
-import os
 
 from PyQt6.QtWidgets import QApplication, QFileDialog, QPushButton, QWidget, QVBoxLayout, QSlider, QLabel, QCheckBox, \
     QLineEdit, QHBoxLayout, QTabWidget
+from PyQt6.QtCore import Qt
+
 from file_loader import load_nifti, load_trk
 from viewer import PyVistaViewer
-from src.conversion.from_trk_write_fbr import trk_to_fbr
-from PyQt6.QtCore import Qt
+from converter import Converter
 
 
 class WindowApp(QWidget):
@@ -165,7 +166,8 @@ class WindowApp(QWidget):
         converted_file_path = os.path.join(temp_dir, f'{file_name[:-4]}_converted.fbr')
 
         # Convertir le fichier .trk en .fbr
-        trk_to_fbr(file_path, converted_file_path)
+        trk2fbr_conversion = Converter(file_path, converted_file_path, "trk_to_fbr")
+        trk2fbr_conversion.convert()
 
         # Ajouter un bouton de téléchargement
         self.download_button = QPushButton(f"Télécharger {file_name[:-4]}_converted.fbr")
