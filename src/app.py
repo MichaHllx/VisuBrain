@@ -1,13 +1,14 @@
+import os
 import sys
 import tempfile
-import os
 
 from PyQt6.QtWidgets import QApplication, QFileDialog, QPushButton, QWidget, QVBoxLayout, QSlider, QLabel, QCheckBox, \
     QLineEdit, QHBoxLayout, QTabWidget
-from file_loader import load_nifti, load_trk
-from viewer import PyVistaViewer
-from src.conversion.from_trk_write_fbr import trk_to_fbr
 from PyQt6.QtCore import Qt
+
+from file_loader import FileLoader
+from viewer import PyVistaViewer
+from converter import Converter
 
 
 class WindowApp(QWidget):
@@ -29,6 +30,10 @@ class WindowApp(QWidget):
         self.init_converter_tab()
 
         self.setLayout(self.layout)
+
+        self.data = None
+
+        self.file_loader = FileLoader()
 
     def init_visualization_tab(self):
         layout = QVBoxLayout()
@@ -70,16 +75,15 @@ class WindowApp(QWidget):
         self.visualization_tab.setLayout(layout)
 
     def load_nifti_button_behavior(self):
-        global data
         file_path, _ = QFileDialog.getOpenFileName(self, "Charger un fichier NIfTI", "", "NIfTI Files (*.nii *.nii.gz)")
         if file_path:
-            data, affine = load_nifti(file_path)
-            self.update_sliders_max(data.shape)
-            self.viewer.show_nifti(file_path, data)
+            self.data, affine = self.file_loader.load_nifti(file_path)
+            self._set_sliders_max(self.data.shape)
+            self.viewer.show_nifti(file_path, self.data)
             self.add_file_checkbox(file_path, "NIfTI")
             self.loaded_files[file_path] = "NIfTI"
 
-    def update_sliders_max(self, dimensions):
+    def _set_sliders_max(self, dimensions):
         x, y, z = dimensions
         self.slice_controls["Axial"][0].setMaximum(z - 1)  # Z    |
         self.slice_controls["Coronal"][0].setMaximum(y - 1)  # Y  |---> RAS+mm
@@ -88,7 +92,7 @@ class WindowApp(QWidget):
     def load_trk_button_behavior(self):
         file_path, _ = QFileDialog.getOpenFileName(self, "Charger un fichier Tractographie", "", "Tractography Files (*.trk *.tck)")
         if file_path:
-            streamlines, trk = load_trk(file_path)
+            streamlines, trk = self.file_loader.load_trk(file_path)
             self.viewer.show_tractogram(file_path, streamlines, trk)
             self.add_file_checkbox(file_path, "Tractographie")
             self.loaded_files[file_path] = "Tractographie"
@@ -108,14 +112,14 @@ class WindowApp(QWidget):
 
     def update_slice(self, value, orientation):
         self.slice_controls[orientation][1].setText(str(value))
-        self.viewer.update_slice_position(orientation.lower(), value, data)
+        self.viewer.update_slice_position(orientation.lower(), value, self.data)
 
     def manual_slice_update(self, orientation, input_box):
         try:
             value = int(input_box.text())
             if 0 < value < self.slice_controls[orientation][0].maximum():
                 self.slice_controls[orientation][0].setValue(value)
-                self.viewer.update_slice_position(orientation.lower(), value, data)
+                self.viewer.update_slice_position(orientation.lower(), value, self.data)
         except ValueError:
             pass
 
@@ -165,7 +169,8 @@ class WindowApp(QWidget):
         converted_file_path = os.path.join(temp_dir, f'{file_name[:-4]}_converted.fbr')
 
         # Convertir le fichier .trk en .fbr
-        trk_to_fbr(file_path, converted_file_path)
+        trk2fbr_conversion = Converter(file_path, converted_file_path, "trk_to_fbr")
+        trk2fbr_conversion.convert()
 
         # Ajouter un bouton de téléchargement
         self.download_button = QPushButton(f"Télécharger {file_name[:-4]}_converted.fbr")
@@ -179,7 +184,6 @@ class WindowApp(QWidget):
                 data = f.read()
             with open(save_path, 'wb') as f:
                 f.write(data)
-
 
 
 if __name__ == "__main__":
