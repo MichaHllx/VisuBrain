@@ -180,4 +180,11 @@ class Converter:
             'hdr_size': 1000
         }
 
+        # Info sur les dimensions de l'image FBR
+        # Info sur les dimensions des voxels de l'image FBR
+        # Info sur l'ordre/l'orientation des voxels de l'image FBR (RAS, RAS+, LPS, ...)
+        # Donc info sur l'espace de référence utilisé pour l'image FBR
+        # Info sur (0,0,0) au centre d'un voxel ou dans le coin (TRK c'est dans le coin d'un voxel)
+        # Ensuite trouver la transformation affine pour passer de l'espace des voxels de l'image FBR à l'espace RASMM (affine_to_rasmm)
+
         return streamlines, data_per_point, affine_to_rasmm, header
