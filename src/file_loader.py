@@ -1,6 +1,8 @@
 import nibabel as nib
 import numpy as np
 
+from PyQt6.QtWidgets import QMessageBox
+
 from dipy.io.stateful_tractogram import Space, StatefulTractogram
 from dipy.io.streamline import load_tractogram
 from dipy.tracking.streamline import transform_streamlines
@@ -24,19 +26,19 @@ class FileLoader:
         return data, self.nifti_affine
 
     def load_trk(self, trk_path):
-        """Charge un fichier tractographie .trk"""
-        if self.nifti_path is not None:
-            if trk_path.endswith(".tck"):
-                trk = load_tractogram(trk_path, self.nifti_path)
-            else:
-                trk = load_tractogram(trk_path, 'same') # voxel space (dimensions i,j,k exprimées en unité de voxel) ??
-            # TODO : info sur la correspondance des axes du voxel space par rapport aux axes anatomiques !
+        """Charge un fichier tractographie .trk ou .tck"""
 
-            stream_reg = transform_streamlines(trk.streamlines, np.linalg.inv(self.nifti_affine))
-            sft_reg = StatefulTractogram(stream_reg, self.img, Space.RASMM)
-            streamlines = sft_reg.streamlines
+        if self.nifti_path is None and trk_path.endswith(".tck"):
+            QMessageBox.critical(None, "Error", "A tck file needs an anatomical reference image beforehand.")
+            return None, None
+
+        if trk_path.endswith(".tck"):
+            tracto = load_tractogram(trk_path, self.nifti_path)
         else:
-            trk = load_tractogram(trk_path, 'same')
-            streamlines = trk.streamlines
+            tracto = load_tractogram(trk_path, 'same')
 
-        return streamlines, trk
+        stream_reg = transform_streamlines(tracto.streamlines, np.linalg.inv(self.nifti_affine))
+        sft_reg = StatefulTractogram(stream_reg, self.img, Space.RASMM)
+        streamlines = sft_reg.streamlines
+
+        return streamlines, tracto

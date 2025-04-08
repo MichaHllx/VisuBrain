@@ -106,9 +106,10 @@ class WindowApp(QWidget):
         file_path, _ = QFileDialog.getOpenFileName(self, "Charger un fichier Tractographie", "", "Tractography Files (*.trk *.tck)")
         if file_path:
             streamlines, trk = self.loader.load_trk(file_path)
-            self.viewer.show_tractogram(file_path, streamlines, trk)
-            self.add_file_checkbox(file_path, "Tractographie")
-            self.loaded_files[file_path] = "Tractographie"
+            if streamlines is not None and trk is not None:
+                self.viewer.show_tractogram(file_path, streamlines, trk)
+                self.add_file_checkbox(file_path, "Tractographie")
+                self.loaded_files[file_path] = "Tractographie"
 
     def add_file_checkbox(self, file_path, file_type):
         checkbox = QCheckBox(f"{file_type}: {file_path.split('/')[-1]}")
