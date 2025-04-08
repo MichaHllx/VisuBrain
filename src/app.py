@@ -14,40 +14,52 @@ from converter import Converter
 class WindowApp(QWidget):
     def __init__(self):
         super().__init__()
-        self.setGeometry(200, 200, 800, 800)
 
-        self.layout = QVBoxLayout()
+        self.drop_label = None
+        self.download_button = None
+        self.load_button = None
+        self.slice_controls = None
+        self.loaded_files = None
+        self.file_checkboxes = None
+        self.viewer = None
+        self.load_trk_button = None
+        self.load_nifti_button = None
+        self.data = None
+        self.loader = FileLoader()
+
+        self.setGeometry(200, 200, 1000, 1000)
+
+        self.main_layout = QVBoxLayout()
+
+        # Les 2 onglets
+        self.viz_layout = None
+        self.converter_layout = None
+
         self.tabs = QTabWidget()
-        self.layout.addWidget(self.tabs)
-
+        self.main_layout.addWidget(self.tabs)
         self.visualization_tab = QWidget()
         self.converter_tab = QWidget()
-
         self.tabs.addTab(self.visualization_tab, "Visualisation")
         self.tabs.addTab(self.converter_tab, "Convertisseur")
 
         self.init_visualization_tab()
         self.init_converter_tab()
 
-        self.setLayout(self.layout)
-
-        self.data = None
-
-        self.file_loader = FileLoader()
+        self.setLayout(self.main_layout)
 
     def init_visualization_tab(self):
-        layout = QVBoxLayout()
+        self.viz_layout = QVBoxLayout()
 
         self.load_nifti_button = QPushButton("Charger un fichier NIfTI (.nii, .nii.gz)")
         self.load_nifti_button.clicked.connect(self.load_nifti_button_behavior)
-        layout.addWidget(self.load_nifti_button)
+        self.viz_layout.addWidget(self.load_nifti_button)
 
         self.load_trk_button = QPushButton("Charger un fichier de tractographie (.trk, .tck)")
         self.load_trk_button.clicked.connect(self.load_trk_button_behavior)
-        layout.addWidget(self.load_trk_button)
+        self.viz_layout.addWidget(self.load_trk_button)
 
         self.viewer = PyVistaViewer(self)
-        layout.addWidget(self.viewer)
+        self.viz_layout.addWidget(self.viewer)
 
         self.file_checkboxes = {}
         self.loaded_files = {}
@@ -70,20 +82,21 @@ class WindowApp(QWidget):
             h_layout.addWidget(label)
             h_layout.addWidget(slider)
             h_layout.addWidget(input_box)
-            layout.addLayout(h_layout)
+            self.viz_layout.addLayout(h_layout)
 
-        self.visualization_tab.setLayout(layout)
+        self.visualization_tab.setLayout(self.viz_layout)
 
     def load_nifti_button_behavior(self):
         file_path, _ = QFileDialog.getOpenFileName(self, "Charger un fichier NIfTI", "", "NIfTI Files (*.nii *.nii.gz)")
         if file_path:
-            self.data, affine = self.file_loader.load_nifti(file_path)
+            self.data, affine = self.loader.load_nifti(file_path)
             self._set_sliders_max(self.data.shape)
             self.viewer.show_nifti(file_path, self.data)
             self.add_file_checkbox(file_path, "NIfTI")
-            self.loaded_files[file_path] = "NIfTI"
+            self.loaded_files["NIfTI"] = file_path
 
     def _set_sliders_max(self, dimensions):
+        if len(dimensions) > 3: dimensions = dimensions[:3]
         x, y, z = dimensions
         self.slice_controls["Axial"][0].setMaximum(z - 1)  # Z    |
         self.slice_controls["Coronal"][0].setMaximum(y - 1)  # Y  |---> RAS+mm
@@ -92,16 +105,17 @@ class WindowApp(QWidget):
     def load_trk_button_behavior(self):
         file_path, _ = QFileDialog.getOpenFileName(self, "Charger un fichier Tractographie", "", "Tractography Files (*.trk *.tck)")
         if file_path:
-            streamlines, trk = self.file_loader.load_trk(file_path)
-            self.viewer.show_tractogram(file_path, streamlines, trk)
-            self.add_file_checkbox(file_path, "Tractographie")
-            self.loaded_files[file_path] = "Tractographie"
+            streamlines, trk = self.loader.load_trk(file_path)
+            if streamlines is not None and trk is not None:
+                self.viewer.show_tractogram(file_path, streamlines, trk)
+                self.add_file_checkbox(file_path, "Tractographie")
+                self.loaded_files["Tractographie"] = file_path
 
     def add_file_checkbox(self, file_path, file_type):
         checkbox = QCheckBox(f"{file_type}: {file_path.split('/')[-1]}")
         checkbox.setChecked(True)
         checkbox.stateChanged.connect(lambda state, f=file_path: self.toggle_file_visibility(state, f))
-        self.layout.addWidget(checkbox)
+        self.viz_layout.addWidget(checkbox)
         self.file_checkboxes[file_path] = checkbox
 
     def toggle_file_visibility(self, state, file_path):
@@ -124,20 +138,20 @@ class WindowApp(QWidget):
             pass
 
     def init_converter_tab(self):
-        layout = QVBoxLayout()
+        self.converter_layout = QVBoxLayout()
 
         self.load_button = QPushButton("Charger depuis l'ordinateur")
         self.load_button.clicked.connect(self.handle_button_load)
-        layout.addWidget(self.load_button)
+        self.converter_layout.addWidget(self.load_button)
 
         self.drop_label = QLabel("Glissez un fichier .trk ici")
         self.drop_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self.drop_label.setStyleSheet("QLabel { border: 2px dashed #aaa; }")
         self.drop_label.setAcceptDrops(True)
         self.drop_label.setFixedHeight(100)
-        layout.addWidget(self.drop_label)
+        self.converter_layout.addWidget(self.drop_label)
 
-        self.converter_tab.setLayout(layout)
+        self.converter_tab.setLayout(self.converter_layout)
 
         self.drop_label.installEventFilter(self)
 
