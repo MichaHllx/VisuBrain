@@ -93,7 +93,7 @@ class WindowApp(QWidget):
             self._set_sliders_max(self.data.shape)
             self.viewer.show_nifti(file_path, self.data)
             self.add_file_checkbox(file_path, "NIfTI")
-            self.loaded_files[file_path] = "NIfTI"
+            self.loaded_files["NIfTI"] = file_path
 
     def _set_sliders_max(self, dimensions):
         if len(dimensions) > 3: dimensions = dimensions[:3]
@@ -109,7 +109,7 @@ class WindowApp(QWidget):
             if streamlines is not None and trk is not None:
                 self.viewer.show_tractogram(file_path, streamlines, trk)
                 self.add_file_checkbox(file_path, "Tractographie")
-                self.loaded_files[file_path] = "Tractographie"
+                self.loaded_files["Tractographie"] = file_path
 
     def add_file_checkbox(self, file_path, file_type):
         checkbox = QCheckBox(f"{file_type}: {file_path.split('/')[-1]}")

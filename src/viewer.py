@@ -5,6 +5,7 @@ from PyQt6.QtWidgets import QMessageBox
 
 
 class PyVistaViewer(QtInteractor):
+
     def __init__(self, parent=None):
         super().__init__(parent)
         self.nifti_slice_actors = {}
@@ -13,7 +14,6 @@ class PyVistaViewer(QtInteractor):
         self.plotter = self
         self.add_axes()
         self.show()
-
 
     def show_nifti(self, file_path, data):
 
@@ -41,30 +41,13 @@ class PyVistaViewer(QtInteractor):
                                                                         opacity=0.5,
                                                                         cmap='gray',
                                                                         show_scalar_bar=False)
-
         self.render()
 
     def show_tractogram(self, file_path, streamlines, trk):
         points = np.vstack([s for s in streamlines])
         poly = pv.PolyData(points)
 
-        # # Calcul des couleurs des points
-        # coord = np.floor(points).astype(int)
-        # rgb = get_streamline_density(trk, color=True, resolution_increase=1)
-        # coord_increase = np.floor(points * 1).astype(int)
-        # rgb_points = rgb[coord_increase[:, 0], coord_increase[:, 1], coord_increase[:, 2]]
-        #
-        # l1 = np.ones(len(coord)) * 2
-        # l2 = np.linspace(0, len(coord) - 1, len(coord))
-        # l3 = np.linspace(1, len(coord), len(coord))
-        #
-        # lines = np.stack((l1, l2, l3), axis=-1).astype(int)
-        # lines[streamlines._offsets - 1] = 0
-        #
-        # poly.lines = lines
-
-        # Ajout du maillage avec les couleurs
-        self.tract_actors[file_path] = self.add_mesh(poly)#, scalars=rgb_points, rgb=True)
+        self.tract_actors[file_path] = self.add_mesh(poly)
         self.render()
 
     def set_file_visibility(self, file_path, visible):
@@ -101,5 +84,4 @@ class PyVistaViewer(QtInteractor):
                                                                            opacity=0.5,
                                                                            cmap='gray',
                                                                            show_scalar_bar=False)
-
         self.render()
