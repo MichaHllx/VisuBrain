@@ -37,8 +37,11 @@ class FileLoader:
         else:
             tracto = load_tractogram(trk_path, 'same')
 
-        stream_reg = transform_streamlines(tracto.streamlines, np.linalg.inv(self.nifti_affine))
-        sft_reg = StatefulTractogram(stream_reg, self.img, Space.RASMM)
-        streamlines = sft_reg.streamlines
+        if self.nifti_path is not None:
+            stream_reg = transform_streamlines(tracto.streamlines, np.linalg.inv(self.nifti_affine))
+            sft_reg = StatefulTractogram(stream_reg, self.img, Space.RASMM)
+            streamlines = sft_reg.streamlines
+        else:
+            streamlines = tracto.streamlines
 
         return streamlines, tracto
