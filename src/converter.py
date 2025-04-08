@@ -11,9 +11,9 @@ class Converter:
 
     def __init__(self, input_file: str, output_file: str, conversion_type: str):
         """
-        :param input_file: Chemin du fichier source.
-        :param output_file: Chemin du fichier de destination.
-        :param conversion_type: Type de conversion ("trk_to_fbr" ou "fbr_to_trk").
+        :param input_file: Chemin du fichier source
+        :param output_file: Chemin du fichier de destination
+        :param conversion_type: Type de conversion ("trk_to_fbr" ou "fbr_to_trk")
         """
         self.input_file = input_file
         self.output_file = output_file
@@ -22,8 +22,7 @@ class Converter:
 
     def _validate_files(self):
         """
-        Vérifie la validité du fichier d'entrée et la cohérence avec le type de conversion.
-        Lève une exception si le fichier n'est pas valide.
+        Vérifie la validité du fichier d'entrée et la cohérence avec le type de conversion
         """
         if not os.path.exists(self.input_file):
             raise FileNotFoundError(f"Le fichier d'entrée '{self.input_file}' n'existe pas.")
@@ -42,7 +41,7 @@ class Converter:
 
     def convert(self):
         """
-        Effectue la conversion selon le type spécifié.
+        Effectue la conversion selon le type spécifié
         """
         if self.conversion_type == "trk_to_fbr":
             self._convert_trk_to_fbr()
@@ -53,9 +52,7 @@ class Converter:
 
     def _convert_trk_to_fbr(self):
         """
-        Conversion d'un fichier .trk vers un fichier .fbr.
-        Cette méthode encapsule toutes les étapes : chargement du .trk, transformation des données,
-        préparation de l'en-tête et écriture du fichier .fbr.
+        Conversion d'un fichier .trk vers un fichier .fbr
         """
         # Charger le fichier .trk (par exemple avec une fonction load_trk)
         sft = load_tractogram(self.input_file, 'same')
@@ -73,8 +70,7 @@ class Converter:
     @staticmethod
     def _prepare_fbr_data_from_trk(streamlines):
         """
-        Prépare le header et les fibres pour un fichier .fbr à partir des données d'un fichier .trk.
-        Cette méthode permet d'isoler la logique de transformation des données.
+        Prépare le header et les fibres pour un fichier .fbr à partir des données d'un fichier .trk
         :return: header (dict) et fibres (liste de dicts)
         """
         # Par exemple, on peut itérer sur les streamlines et préparer les listes de points et couleurs
@@ -110,9 +106,7 @@ class Converter:
 
     def _convert_fbr_to_trk(self):
         """
-        Conversion d'un fichier .fbr vers un fichier .trk.
-        Cette méthode charge le fichier .fbr, extrait les informations pertinentes,
-        construit les streamlines et le header pour le format .trk, puis sauvegarde le résultat.
+        Conversion d'un fichier .fbr vers un fichier .trk
         """
         # Charger le fichier .fbr avec BinaryFBRfile
         fbr_obj = BinaryFbrFile(self.input_file)
@@ -128,8 +122,8 @@ class Converter:
     @staticmethod
     def _prepare_trk_data_from_fbr(fbr_obj):
         """
-        Prépare les données nécessaires pour générer un fichier .trk à partir d'un fichier .fbr.
-        :return: streamlines, data_per_point, affine_to_rasmm, header pour le fichier .trk.
+        Prépare les données nécessaires pour créer un fichier .trk à partir d'un fichier .fbr
+        :return: streamlines, data_per_point, affine_to_rasmm, header pour le fichier .trk
         """
         streamlines = []
         data_per_point = {'colors': []}

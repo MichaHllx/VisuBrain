@@ -19,12 +19,12 @@ class WindowApp(QWidget):
         self.download_button = None
         self.load_button = None
         self.slice_controls = None
-        self.loaded_files = None
+        #self.loaded_files = None
         self.file_checkboxes = None
         self.viewer = None
         self.load_trk_button = None
         self.load_nifti_button = None
-        self.data = None
+        self.nifti_data = None
         self.loader = FileLoader()
 
         self.setGeometry(200, 200, 1000, 1000)
@@ -62,7 +62,7 @@ class WindowApp(QWidget):
         self.viz_layout.addWidget(self.viewer)
 
         self.file_checkboxes = {}
-        self.loaded_files = {}
+        #self.loaded_files = {}
 
         self.slice_controls = {}
         for orientation in ["Axial", "Coronal", "Sagittal"]:
@@ -87,13 +87,14 @@ class WindowApp(QWidget):
         self.visualization_tab.setLayout(self.viz_layout)
 
     def load_nifti_button_behavior(self):
-        file_path, _ = QFileDialog.getOpenFileName(self, "Charger un fichier NIfTI", "", "NIfTI Files (*.nii *.nii.gz)")
+        file_path, _ = QFileDialog.getOpenFileName(self, "Charger un fichier NIfTI", "",
+                                                   "NIfTI Files (*.nii *.nii.gz)")
         if file_path:
-            self.data, affine = self.loader.load_nifti(file_path)
-            self._set_sliders_max(self.data.shape)
-            self.viewer.show_nifti(file_path, self.data)
+            self.nifti_data, affine = self.loader.load_nifti(file_path)
+            self._set_sliders_max(self.nifti_data.shape)
+            self.viewer.show_nifti(file_path, self.nifti_data)
             self.add_file_checkbox(file_path, "NIfTI")
-            self.loaded_files["NIfTI"] = file_path
+            #self.loaded_files["NIfTI"] = file_path
 
     def _set_sliders_max(self, dimensions):
         if len(dimensions) > 3: dimensions = dimensions[:3]
@@ -103,13 +104,14 @@ class WindowApp(QWidget):
         self.slice_controls["Sagittal"][0].setMaximum(x - 1)  # X |
 
     def load_trk_button_behavior(self):
-        file_path, _ = QFileDialog.getOpenFileName(self, "Charger un fichier Tractographie", "", "Tractography Files (*.trk *.tck)")
+        file_path, _ = QFileDialog.getOpenFileName(self, "Charger un fichier Tractographie", "",
+                                                   "Tractography Files (*.trk *.tck)")
         if file_path:
             streamlines, trk = self.loader.load_trk(file_path)
             if streamlines is not None and trk is not None:
                 self.viewer.show_tractogram(file_path, streamlines, trk)
                 self.add_file_checkbox(file_path, "Tractographie")
-                self.loaded_files["Tractographie"] = file_path
+                #self.loaded_files["Tractographie"] = file_path
 
     def add_file_checkbox(self, file_path, file_type):
         checkbox = QCheckBox(f"{file_type}: {file_path.split('/')[-1]}")
@@ -119,21 +121,19 @@ class WindowApp(QWidget):
         self.file_checkboxes[file_path] = checkbox
 
     def toggle_file_visibility(self, state, file_path):
-        visible = False
-        if state == 2:
-            visible = True
+        visible = state == 2
         self.viewer.set_file_visibility(file_path, visible)
 
     def update_slice(self, value, orientation):
         self.slice_controls[orientation][1].setText(str(value))
-        self.viewer.update_slice_position(orientation.lower(), value, self.data)
+        self.viewer.update_slice_position(orientation.lower(), value, self.nifti_data)
 
     def manual_slice_update(self, orientation, input_box):
         try:
             value = int(input_box.text())
             if 0 < value < self.slice_controls[orientation][0].maximum():
                 self.slice_controls[orientation][0].setValue(value)
-                self.viewer.update_slice_position(orientation.lower(), value, self.data)
+                self.viewer.update_slice_position(orientation.lower(), value, self.nifti_data)
         except ValueError:
             pass
 
@@ -186,7 +186,7 @@ class WindowApp(QWidget):
         trk2fbr_conversion = Converter(file_path, converted_file_path, "trk_to_fbr")
         trk2fbr_conversion.convert()
 
-        # Ajouter un bouton de téléchargement
+        # bouton de téléchargement
         self.download_button = QPushButton(f"Télécharger {file_name[:-4]}_converted.fbr")
         self.download_button.clicked.connect(lambda: self.download_file(converted_file_path))
         self.converter_tab.layout().addWidget(self.download_button)
