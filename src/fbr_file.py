@@ -30,7 +30,7 @@ class BinaryFbrFile:
             # Lire les groupes
             for _ in range(self._num_groups):
                 group = {}
-                # Lire le nom du groupe (fin avec un caractère nul)
+                # Lire le nom du groupe (! fin avec un caractère nul !)
                 group_name = bytearray()
                 while True:
                     char = f.read(1)
@@ -106,7 +106,7 @@ class BinaryFbrFile:
 
             # Écrire les groupes et les fibres
             for group in header['Groups']:
-                # Écrire le nom du groupe (caractère nul à la fin)
+                # Écrire le nom du groupe (caractère nul à la fin !)
                 f.write(group['Name'].encode('latin-1') + b'\x00')
 
                 # Écrire les propriétés du groupe
@@ -116,24 +116,24 @@ class BinaryFbrFile:
                 f.write(struct.pack('<3B', *group['Color']))
                 f.write(struct.pack('<I', group['NrOfFibers']))
 
-                # par respect du format fbr binaire, obligation d'écrire tous les x puis tous les y puis tous les z, etc
+                # pour respecter format fbr binaire, obligation d'écrire tous les x puis tous les y puis tous les z, etc
                 for fiber in fibers:
                     f.write(struct.pack('<I', fiber['NrOfPoints']))
 
-                    # toutes les coordonnées X en une seule fois
+                    # toutes les coordonnées X
                     f.write(struct.pack(f'<{fiber["NrOfPoints"]}f', *(point[0] for point in fiber['Points'])))
 
-                    # toutes les coordonnées Y en une seule fois
+                    # toutes les coordonnées Y
                     f.write(struct.pack(f'<{fiber["NrOfPoints"]}f', *(point[1] for point in fiber['Points'])))
 
-                    # toutes les coordonnées Z en une seule fois
+                    # toutes les coordonnées Z
                     f.write(struct.pack(f'<{fiber["NrOfPoints"]}f', *(point[2] for point in fiber['Points'])))
 
-                    # toutes les couleurs R en une seule fois
+                    # toutes les couleurs R
                     f.write(struct.pack(f'<{fiber["NrOfPoints"]}B', *(point[3] for point in fiber['Points'])))
 
-                    # toutes les couleurs G en une seule fois
+                    # toutes les couleurs G
                     f.write(struct.pack(f'<{fiber["NrOfPoints"]}B', *(point[4] for point in fiber['Points'])))
 
-                    # toutes les couleurs B en une seule fois
+                    # toutes les couleurs B
                     f.write(struct.pack(f'<{fiber["NrOfPoints"]}B', *(point[5] for point in fiber['Points'])))
