@@ -10,74 +10,50 @@ from fbr_file import BinaryFbrFile
 class Converter:
 
     def __init__(self, input_file: str, output_file: str, conversion_type: str):
-        """
-        :param input_file: Chemin du fichier source.
-        :param output_file: Chemin du fichier de destination.
-        :param conversion_type: Type de conversion ("trk_to_fbr" ou "fbr_to_trk").
-        """
         self.input_file = input_file
         self.output_file = output_file
         self.conversion_type = conversion_type.lower()
         self._validate_files()
 
     def _validate_files(self):
-        """
-        Vérifie la validité du fichier d'entrée et la cohérence avec le type de conversion.
-        Lève une exception si le fichier n'est pas valide.
-        """
         if not os.path.exists(self.input_file):
-            raise FileNotFoundError(f"Le fichier d'entrée '{self.input_file}' n'existe pas.")
+            raise FileNotFoundError(f"Entry file '{self.input_file}' does not exist.")
 
         ext = os.path.splitext(self.input_file)[1].lower()
         if self.conversion_type == "trk_to_fbr":
             if ext != '.trk':
                 raise ValueError(
-                    f"Pour une conversion trk_to_fbr, le fichier d'entrée doit être de type '.trk', "
-                    f"mais l'extension '{ext}' a été trouvée.")
+                    f"For a trk_to_fbr conversion, entry file should be type '.trk', "
+                    f"but type '{ext}' was given.")
         elif self.conversion_type == "fbr_to_trk":
             if ext != '.fbr':
                 raise ValueError(
-                    f"Pour une conversion fbr_to_trk, le fichier d'entrée doit être de type '.fbr', "
-                    f"mais l'extension '{ext}' a été trouvée.")
+                    f"For a fbr_to_trk conversion, entry file should be type '.fbr', "
+                    f"but type '{ext}' was given.")
 
     def convert(self):
-        """
-        Effectue la conversion selon le type spécifié.
-        """
         if self.conversion_type == "trk_to_fbr":
             self._convert_trk_to_fbr()
         elif self.conversion_type == "fbr_to_trk":
             self._convert_fbr_to_trk()
         else:
-            raise ValueError("Type de conversion non supporté. Utilisez 'trk_to_fbr' ou 'fbr_to_trk'.")
+            raise ValueError("Conversion type unsupported. Please use 'trk_to_fbr' or 'fbr_to_trk'.")
 
     def _convert_trk_to_fbr(self):
-        """
-        Conversion d'un fichier .trk vers un fichier .fbr.
-        Cette méthode encapsule toutes les étapes : chargement du .trk, transformation des données,
-        préparation de l'en-tête et écriture du fichier .fbr.
-        """
-        # Charger le fichier .trk (par exemple avec une fonction load_trk)
+        # Charger le fichier .trk
         sft = load_tractogram(self.input_file, 'same')
         sft.to_vox()
         sft.to_corner()
         streamlines = sft.streamlines
 
-        # Préparer les données et le header pour le fichier .fbr
         header, fibers = self._prepare_fbr_data_from_trk(streamlines)
 
-        # Écrire le fichier .fbr
         new_fbr = BinaryFbrFile()
         new_fbr.write_fbr(self.output_file, header, fibers)
 
     @staticmethod
     def _prepare_fbr_data_from_trk(streamlines):
-        """
-        Prépare le header et les fibres pour un fichier .fbr à partir des données d'un fichier .trk.
-        Cette méthode permet d'isoler la logique de transformation des données.
-        :return: header (dict) et fibres (liste de dicts)
-        """
-        # Par exemple, on peut itérer sur les streamlines et préparer les listes de points et couleurs
+
         fibers = []
         for streamline in streamlines:
             fiber = {
@@ -109,28 +85,18 @@ class Converter:
         return header, fibers
 
     def _convert_fbr_to_trk(self):
-        """
-        Conversion d'un fichier .fbr vers un fichier .trk.
-        Cette méthode charge le fichier .fbr, extrait les informations pertinentes,
-        construit les streamlines et le header pour le format .trk, puis sauvegarde le résultat.
-        """
-        # Charger le fichier .fbr avec BinaryFBRfile
+
         fbr_obj = BinaryFbrFile(self.input_file)
 
-        # Extraire les données pour le format .trk
+        # Extraction data pour format .trk
         streamlines, data_per_point, affine_to_rasmm, header = self._prepare_trk_data_from_fbr(fbr_obj)
 
-        # Créer un Tractogram et le fichier .trk
         tractogram = Tractogram(streamlines=streamlines, data_per_point=data_per_point, affine_to_rasmm=affine_to_rasmm)
         new_trk = TrkFile(tractogram=tractogram, header=header)
         new_trk.save(self.output_file)
 
     @staticmethod
     def _prepare_trk_data_from_fbr(fbr_obj):
-        """
-        Prépare les données nécessaires pour générer un fichier .trk à partir d'un fichier .fbr.
-        :return: streamlines, data_per_point, affine_to_rasmm, header pour le fichier .trk.
-        """
         streamlines = []
         data_per_point = {'colors': []}
         for group in fbr_obj._groups:
