@@ -22,11 +22,13 @@ class PyVistaViewer(QtInteractor):
         self.slice_update_timer.timeout.connect(self.perform_slice_update)
         self.pending_update = None
 
+        self.current_zoom_factor = 1.0
+
         self.add_axes()
         self.show()
 
-    def set_working_nifti_obj(self, working_nifti_obj):
-        self.working_nifti_obj = working_nifti_obj
+    def set_working_nifti_obj(self, nifti_obj):
+        self.working_nifti_obj = nifti_obj
 
     def schedule_slice_update(self, axis, value, opacity):
         self.pending_update = (axis, value, opacity)
@@ -35,7 +37,7 @@ class PyVistaViewer(QtInteractor):
     def perform_slice_update(self):
         if self.pending_update:
             axis, value, opacity = self.pending_update
-            self.update_slice_position(axis, value, opacity)
+            self.update_slices(axis, value, opacity)
             self.pending_update = None
 
     def show_nifti_slices(self):
@@ -60,6 +62,7 @@ class PyVistaViewer(QtInteractor):
         slice_axial = self.slices_actor.slice(normal=[0, 0, 1], origin=[0, 0, z // 2])
         slice_coronal = self.slices_actor.slice(normal=[0, 1, 0], origin=[0, y // 2, 0])
         slice_sagittal = self.slices_actor.slice(normal=[1, 0, 0], origin=[x // 2, 0, 0])
+
         self.nifti_slice_actors[self.working_nifti_obj.file_path + "axial_slice"] = (
             self.add_mesh(slice_axial, opacity=0.5, cmap='gray', show_scalar_bar=False)
         )
@@ -117,9 +120,8 @@ class PyVistaViewer(QtInteractor):
         if file_path in self.tract_actors:
             self.tract_actors[file_path].SetVisibility(visible)
         self.render()
-        self.reset_camera()
 
-    def update_slice_position(self, axis, value, opacity=0.5):
+    def update_slices(self, axis, value, opacity=0.5):
         if axis == "axial":
             normal = [0, 0, 1]
             origin = [0, 0, int(value)]
@@ -132,8 +134,9 @@ class PyVistaViewer(QtInteractor):
         else:
             return
 
-        volume = pv.wrap(self.working_nifti_obj.data)
-        new_slice = volume.slice(normal=normal, origin=origin)
+        #volume = pv.wrap(self.working_nifti_obj.data)
+        new_slice = self.slices_actor.slice(normal=normal, origin=origin)
+
         key = self.working_nifti_obj.file_path + axis + "_slice"
         if key in self.nifti_slice_actors:
             # màj acteur existant
@@ -145,3 +148,12 @@ class PyVistaViewer(QtInteractor):
             self.nifti_slice_actors[key] = self.add_mesh(new_slice, opacity=opacity, cmap='gray', show_scalar_bar=False)
         self.render()
 
+    def set_zoom(self, new_zoom_factor):
+        relative_factor = new_zoom_factor / self.current_zoom_factor
+        self.camera.Zoom(relative_factor)
+        self.current_zoom_factor = new_zoom_factor
+        self.render()
+
+    def reset_view(self):
+        self.reset_camera(self.working_nifti_obj)
+        self.render()

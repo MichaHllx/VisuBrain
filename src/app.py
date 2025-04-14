@@ -13,6 +13,7 @@ from converter import Converter
 
 
 class WindowApp(QWidget):
+
     def __init__(self):
         super().__init__()
 
@@ -53,7 +54,8 @@ class WindowApp(QWidget):
         # visualization tab
         self.visualization_tab = QWidget()
         self.viz_layout = None
-        self.control_panel = None
+        self.left_control_panel = None
+        self.right_control_panel = None
         self.bg_combo = None
         self.opacity_slider = None
         self.slice_opacity = 0.5
@@ -78,7 +80,8 @@ class WindowApp(QWidget):
     def init_visualization_tab(self):
         # main layout for viz tab
         self.viz_layout = QHBoxLayout()
-        self.control_panel = QVBoxLayout()
+        self.left_control_panel = QVBoxLayout()
+        self.right_control_panel = QVBoxLayout()
 
         # Contrôles des sliders
         self.slice_controls = {}
@@ -89,15 +92,19 @@ class WindowApp(QWidget):
             slider.setMinimum(0)
             slider.setMaximum(100)
             slider.setValue(0)
-            slider.valueChanged.connect(lambda value, o=orientation: self.update_slice(value, o))
+            slider.valueChanged.connect(lambda value, o=orientation: self.change_slices_position(value, o))
+
             input_box = QLineEdit()
             input_box.setFixedWidth(50)
             input_box.returnPressed.connect(lambda o=orientation, box=input_box: self.manual_slice_update(o, box))
+
             self.slice_controls[orientation] = (slider, input_box)
+
             h_layout.addWidget(label)
             h_layout.addWidget(slider)
             h_layout.addWidget(input_box)
-            self.control_panel.addLayout(h_layout)
+
+            self.left_control_panel.addLayout(h_layout)
 
         # Paramètre pour changer le background
         bg_layout = QHBoxLayout()
@@ -108,7 +115,7 @@ class WindowApp(QWidget):
         self.bg_combo.currentTextChanged.connect(self.change_background_color)
         bg_layout.addWidget(bg_label)
         bg_layout.addWidget(self.bg_combo)
-        self.control_panel.addLayout(bg_layout)
+        self.left_control_panel.addLayout(bg_layout)
 
         # Paramètre pour l'opacité des slices
         opacity_layout = QHBoxLayout()
@@ -120,7 +127,7 @@ class WindowApp(QWidget):
         self.opacity_slider.valueChanged.connect(self.change_slice_opacity)
         opacity_layout.addWidget(opacity_label)
         opacity_layout.addWidget(self.opacity_slider)
-        self.control_panel.addLayout(opacity_layout)
+        self.left_control_panel.addLayout(opacity_layout)
 
         # paramètre pour le view rendering
         mode_layout = QHBoxLayout()
@@ -131,7 +138,7 @@ class WindowApp(QWidget):
         self.mode_combo.currentTextChanged.connect(self.change_rendering_mode)
         mode_layout.addWidget(mode_label)
         mode_layout.addWidget(self.mode_combo)
-        self.control_panel.addLayout(mode_layout)
+        self.left_control_panel.addLayout(mode_layout)
 
         # sélectionner (un seul) nifti parmi les NIfTI déjà load
         nifti_selector_layout = QHBoxLayout()
@@ -140,19 +147,36 @@ class WindowApp(QWidget):
         self.nifti_selector.currentTextChanged.connect(self.nifti_selection_changed)
         nifti_selector_layout.addWidget(nifti_selector_label)
         nifti_selector_layout.addWidget(self.nifti_selector)
-        self.control_panel.addLayout(nifti_selector_layout)
+        self.left_control_panel.addLayout(nifti_selector_layout)
 
-        self.viz_layout.addLayout(self.control_panel, stretch=1) # 20% de l'espace pour le control panel
+        # contrôle pour le zoom
+        zoom_layout = QVBoxLayout()
+        self.zoom_slider = QSlider(Qt.Vertical)
+        self.zoom_slider.setMinimum(50)
+        self.zoom_slider.setMaximum(500)
+        self.zoom_slider.setValue(100)
+        self.zoom_slider.valueChanged.connect(self.change_zoom)
+        zoom_layout.addWidget(self.zoom_slider)
+        self.right_control_panel.addLayout(zoom_layout)
+
+        # bouton vue reinitialize
+        self.reset_view_button = QPushButton()
+        self.reset_view_button.clicked.connect(self.reset_cam_zoom)
+        self.right_control_panel.addWidget(self.reset_view_button)
+
+        self.viz_layout.addLayout(self.left_control_panel, stretch=1) # 20% de l'espace pour le control panel
         self.viz_layout.addWidget(self.viewer, stretch=4)  # 80% de l'espace pour le viewer
+        self.viz_layout.addLayout(self.right_control_panel, stretch=1)
 
         self.visualization_tab.setLayout(self.viz_layout)
 
     def nifti_selection_changed(self, selected_label):
-        """Callback quand on change la sélection des NIfTI chargés."""
+        """Callback quand on change la sélection des NIfTI load."""
         if selected_label in self.loaded_nifti_map:
             nifti_obj = self.loaded_nifti_map[selected_label]
             self.viewer.set_working_nifti_obj(nifti_obj)
             self._set_sliders_values(nifti_obj.get_dimensions())
+            self.opacity_slider.setValue(50)
 
             mode = self.mode_combo.currentText()
             if mode == "Slices":
@@ -189,9 +213,16 @@ class WindowApp(QWidget):
         if self.viewer.working_nifti_obj:
             for orient in ["Axial", "Coronal", "Sagittal"]:
                 current_value = self.slice_controls[orient][0].value()
-                self.viewer.update_slice_position(orient.lower(),
-                                                  current_value,
-                                                  opacity=self.slice_opacity)
+                self.viewer.update_slices(orient.lower(), current_value, opacity=self.slice_opacity)
+
+    def change_zoom(self, value):
+        # 100 correspond à 1.0, donc il faut div par 100
+        zoom_factor = value / 100.0
+        self.viewer.set_zoom(zoom_factor)
+
+    def reset_cam_zoom(self):
+        self.zoom_slider.setValue(100)
+        self.viewer.reset_view()
 
     def load_nifti_button_behavior(self):
         file_path, _ = QFileDialog.getOpenFileName(self, "Load a NIfTI file", "",
@@ -246,7 +277,7 @@ class WindowApp(QWidget):
         checkbox = QCheckBox(f"Tractography: {os.path.basename(file_path)}")
         checkbox.setChecked(True)
         checkbox.stateChanged.connect(lambda state, f=file_path: self.toggle_file_visibility(state, f))
-        self.control_panel.addWidget(checkbox)
+        self.left_control_panel.addWidget(checkbox)
 
         checkbox.associated_nifti = self.nifti_selector.currentText()
         self.tracto_checkboxes[file_path] = checkbox
@@ -255,7 +286,7 @@ class WindowApp(QWidget):
         visible = state == 2
         self.viewer.set_file_visibility(file_path, visible)
 
-    def update_slice(self, value, orientation):
+    def change_slices_position(self, value, orientation):
         self.slice_controls[orientation][1].setText(str(value))
 
         if self.viewer.working_nifti_obj:
@@ -266,7 +297,7 @@ class WindowApp(QWidget):
             value = int(input_box.text())
             if 0 <= value < self.slice_controls[orientation][0].maximum():
                 self.slice_controls[orientation][0].setValue(value)
-                self.viewer.update_slice_position(orientation.lower(), value, opacity=self.slice_opacity)
+                self.viewer.update_slices(orientation.lower(), value, opacity=self.slice_opacity)
         except ValueError:
             pass
 
