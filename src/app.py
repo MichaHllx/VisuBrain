@@ -160,7 +160,8 @@ class WindowApp(QWidget):
         self.right_control_panel.addLayout(zoom_layout)
 
         # bouton vue reinitialize
-        self.reset_view_button = QPushButton()
+        self.reset_view_button = QPushButton("Reset\nzoom")
+        self.reset_view_button.setFixedSize(50, 40)
         self.reset_view_button.clicked.connect(self.reset_cam_zoom)
         self.right_control_panel.addWidget(self.reset_view_button)
 
