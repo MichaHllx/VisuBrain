@@ -1,145 +1,98 @@
-# import pyvista as pv
-# from pyvistaqt import QtInteractor
-# import numpy as np
-# from PyQt6.QtWidgets import QMessageBox
-#
-#
-# class PyVistaViewer(QtInteractor):
-#
-#     def __init__(self, parent=None):
-#         super().__init__(parent)
-#         self.nifti_slice_actors = {}
-#         self.tract_actors = {}
-#         self.volume_data = {}
-#         self.plotter = self
-#         self.add_axes()
-#         self.show()
-#
-#     def show_nifti(self, file_path, data):
-#
-#         if data.ndim != 3:
-#             QMessageBox.critical(self, "Error", "The file dimensions are incompatible.")
-#             return
-#
-#         self.volume_data[file_path] = data.shape
-#         volume = pv.wrap(data)
-#         x, y, z = data.shape
-#
-#         slice_axial = volume.slice(normal=[0, 0, 1], origin=[0, 0, z//2]) # -> inferior to superior du sujet
-#         slice_coronal = volume.slice(normal=[0, 1, 0], origin=[0, y//2, 0]) # -> posterior to anterior du sujet
-#         slice_sagittal = volume.slice(normal=[1, 0, 0], origin=[x//2, 0, 0]) # -> left to right du sujet
-#
-#         self.nifti_slice_actors[file_path + "axial_slice"] = self.add_mesh(slice_axial,
-#                                                                      opacity=0.5,
-#                                                                      cmap='gray',
-#                                                                      show_scalar_bar=False)
-#         self.nifti_slice_actors[file_path + "coronal_slice"] = self.add_mesh(slice_coronal,
-#                                                                        opacity=0.5,
-#                                                                        cmap='gray',
-#                                                                        show_scalar_bar=False)
-#         self.nifti_slice_actors[file_path + "sagittal_slice"] = self.add_mesh(slice_sagittal,
-#                                                                         opacity=0.5,
-#                                                                         cmap='gray',
-#                                                                         show_scalar_bar=False)
-#         self.render()
-#
-#     def show_tractogram(self, file_path, streamlines, trk):
-#         points = np.vstack([s for s in streamlines])
-#         poly = pv.PolyData(points)
-#
-#         self.tract_actors[file_path] = self.add_mesh(poly)
-#         self.render()
-#
-#     def set_file_visibility(self, file_path, visible):
-#         for axis in ["axial", "coronal", "sagittal"]:
-#             key = file_path + axis + "_slice"
-#             if key in self.nifti_slice_actors:
-#                 self.nifti_slice_actors[key].SetVisibility(visible)
-#         if file_path in self.tract_actors:
-#             self.tract_actors[file_path].SetVisibility(visible)
-#         self.render()
-#
-#     def update_slice_position(self, axis, value, data):
-#         for file_path, dimensions in self.volume_data.items():
-#             if axis == "axial":
-#                 slice_idx = int(value)
-#                 normal = [0, 0, 1]
-#                 origin = [0, 0, slice_idx]
-#             elif axis == "coronal":
-#                 slice_idx = int(value)
-#                 normal = [0, 1, 0]
-#                 origin = [0, slice_idx, 0]
-#             elif axis == "sagittal":
-#                 slice_idx = int(value)
-#                 normal = [1, 0, 0]
-#                 origin = [slice_idx, 0, 0]
-#             else:
-#                 return
-#
-#             volume = pv.wrap(data)
-#             sliced = volume.slice(normal=normal, origin=origin)
-#
-#             self.nifti_slice_actors[file_path + axis + "_slice"].SetVisibility(False)
-#             self.nifti_slice_actors[file_path + axis + "_slice"] = self.add_mesh(sliced,
-#                                                                            opacity=0.5,
-#                                                                            cmap='gray',
-#                                                                            show_scalar_bar=False)
-#         self.render()
-
 import pyvista as pv
-from PyQt6.QtCore import QTimer
-from pyvistaqt import QtInteractor
 import numpy as np
+
+from PyQt6.QtCore import QTimer
 from PyQt6.QtWidgets import QMessageBox
+from pyvistaqt import QtInteractor
+
 
 class PyVistaViewer(QtInteractor):
+
     def __init__(self, parent=None):
         super().__init__(parent)
         self.nifti_slice_actors = {}
         self.tract_actors = {}
-        self.volume_obj = None
+        self.slices_actor = None
+        self.volume_actor = None
+
+        self.working_nifti_obj = None
 
         self.slice_update_timer = QTimer()
         self.slice_update_timer.setSingleShot(True)
         self.slice_update_timer.timeout.connect(self.perform_slice_update)
         self.pending_update = None
 
+        self.current_zoom_factor = 1.0
+
         self.add_axes()
         self.show()
 
-    def schedule_slice_update(self, axis, value, nifti_obj):
-        self.pending_update = (axis, value, nifti_obj)
+    def set_working_nifti_obj(self, nifti_obj):
+        self.working_nifti_obj = nifti_obj
+
+    def schedule_slice_update(self, axis, value, opacity):
+        self.pending_update = (axis, value, opacity)
         self.slice_update_timer.start(50)  # en ms
 
     def perform_slice_update(self):
         if self.pending_update:
-            axis, value, nifti_obj = self.pending_update
-            self.update_slice_position(axis, value, nifti_obj)
+            axis, value, opacity = self.pending_update
+            self.update_slices(axis, value, opacity)
             self.pending_update = None
 
-    def show_nifti(self, nifti_obj):
-        data = nifti_obj.data
-        shape = nifti_obj.get_dimensions()
+    def show_nifti_slices(self):
+        data = self.working_nifti_obj.data
+        shape = self.working_nifti_obj.get_dimensions()
 
         if len(shape) != 3:
             QMessageBox.critical(self, "Erreur", "Bad file dimension")
             return
 
-        self.volume_obj = pv.wrap(data)
+        self.slices_actor = pv.wrap(data)
+
+        if self.volume_actor is not None:
+            self.remove_actor(self.volume_actor)
+            self.volume_actor = None
+        for slice_actor in self.nifti_slice_actors.values():
+            if slice_actor is not None:
+                self.remove_actor(slice_actor)
+        self.nifti_slice_actors = {}
 
         x, y, z = shape
-        slice_axial = self.volume_obj.slice(normal=[0, 0, 1], origin=[0, 0, z//2])
-        slice_coronal = self.volume_obj.slice(normal=[0, 1, 0], origin=[0, y//2, 0])
-        slice_sagittal = self.volume_obj.slice(normal=[1, 0, 0], origin=[x//2, 0, 0])
-        self.nifti_slice_actors[nifti_obj.file_path + "axial_slice"] = (
+        slice_axial = self.slices_actor.slice(normal=[0, 0, 1], origin=[0, 0, z // 2])
+        slice_coronal = self.slices_actor.slice(normal=[0, 1, 0], origin=[0, y // 2, 0])
+        slice_sagittal = self.slices_actor.slice(normal=[1, 0, 0], origin=[x // 2, 0, 0])
+
+        self.nifti_slice_actors[self.working_nifti_obj.file_path + "axial_slice"] = (
             self.add_mesh(slice_axial, opacity=0.5, cmap='gray', show_scalar_bar=False)
         )
-        self.nifti_slice_actors[nifti_obj.file_path + "coronal_slice"] = (
+        self.nifti_slice_actors[self.working_nifti_obj.file_path + "coronal_slice"] = (
             self.add_mesh(slice_coronal, opacity=0.5, cmap='gray', show_scalar_bar=False)
         )
-        self.nifti_slice_actors[nifti_obj.file_path + "sagittal_slice"] = (
+        self.nifti_slice_actors[self.working_nifti_obj.file_path + "sagittal_slice"] = (
             self.add_mesh(slice_sagittal, opacity=0.5, cmap='gray', show_scalar_bar=False)
         )
+        self.render()
+        return True
+
+    def show_nifti_volume(self):
+        data = self.working_nifti_obj.data
+        shape = self.working_nifti_obj.get_dimensions()
+
+        if len(shape) != 3:
+            QMessageBox.critical(self, "Erreur", "Bad file dimension")
+            return False
+
+        if self.volume_actor is not None:
+            self.remove_actor(self.volume_actor)
+            self.volume_actor = None
+        for slice_actor in self.nifti_slice_actors.values():
+            if slice_actor is not None:
+                self.remove_actor(slice_actor)
+        self.nifti_slice_actors = {}
+
+        self.volume_actor = self.add_volume(pv.wrap(data), opacity="sigmoid", cmap="gray", shade=True,
+                                            show_scalar_bar=False)
         self.render()
         return True
 
@@ -168,7 +121,7 @@ class PyVistaViewer(QtInteractor):
             self.tract_actors[file_path].SetVisibility(visible)
         self.render()
 
-    def update_slice_position(self, axis, value, nifti_obj):
+    def update_slices(self, axis, value, opacity=0.5):
         if axis == "axial":
             normal = [0, 0, 1]
             origin = [0, 0, int(value)]
@@ -181,15 +134,26 @@ class PyVistaViewer(QtInteractor):
         else:
             return
 
-        new_slice = self.volume_obj.slice(normal=normal, origin=origin)
-        key = nifti_obj.file_path + axis + "_slice"
+        #volume = pv.wrap(self.working_nifti_obj.data)
+        new_slice = self.slices_actor.slice(normal=normal, origin=origin)
+
+        key = self.working_nifti_obj.file_path + axis + "_slice"
         if key in self.nifti_slice_actors:
-            # Màj acteur existant
+            # màj acteur existant
             actor = self.nifti_slice_actors[key]
             actor.mapper.SetInputData(new_slice)
             actor.mapper.Update()
+            actor.GetProperty().SetOpacity(opacity)
         else:
-            actor = self.add_mesh(new_slice, opacity=0.5, cmap='gray', show_scalar_bar=False)
-            self.nifti_slice_actors[key] = actor
+            self.nifti_slice_actors[key] = self.add_mesh(new_slice, opacity=opacity, cmap='gray', show_scalar_bar=False)
+        self.render()
 
+    def set_zoom(self, new_zoom_factor):
+        relative_factor = new_zoom_factor / self.current_zoom_factor
+        self.camera.Zoom(relative_factor)
+        self.current_zoom_factor = new_zoom_factor
+        self.render()
+
+    def reset_view(self):
+        self.reset_camera(self.working_nifti_obj)
         self.render()
