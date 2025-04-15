@@ -122,7 +122,6 @@ class PyVistaViewer(QtInteractor):
                 colors = np.tile(np.array([255, 255, 255], dtype=np.uint8), (n_points, 1))
             else:
                 diffs = np.diff(streamline, axis=0) # calcul tangente de chaque point (dérivée)
-                print(diffs)
                 diffs = np.vstack([diffs, diffs[-1]]) # répéter dernière pour garder la mm size
                 norms = np.linalg.norm(diffs, axis=1, keepdims=True) # normalise le vecteur (size=1)
                 norms[norms == 0] = 1.0

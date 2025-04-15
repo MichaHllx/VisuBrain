@@ -37,11 +37,14 @@ class WindowApp(QWidget):
         load_nifti_action = QAction("Load a NIfTI file (.nii, .nii.gz)", self)
         load_nifti_action.triggered.connect(self.load_nifti_button_behavior)
         file_menu.addAction(load_nifti_action)
-
         # Action pour load un fichier de tractographie
         load_trk_action = QAction("Load a tractography file (.trk, .tck)", self)
         load_trk_action.triggered.connect(self.load_trk_button_behavior)
         file_menu.addAction(load_trk_action)
+        # action pour prendre un screenshot
+        screenshot_action = QAction("Take a screenshot", self)
+        screenshot_action.triggered.connect(self.take_screenshot)
+        file_menu.addAction(screenshot_action)
 
         # action pour voir les stats des tracts load
         view_stats_tract_action = QAction("View tracts statistics", self)
@@ -224,6 +227,15 @@ class WindowApp(QWidget):
     def reset_cam_zoom(self):
         self.zoom_slider.setValue(100)
         self.viewer.reset_view()
+
+    def take_screenshot(self):
+        fileName, _ = QFileDialog.getSaveFileName(self, "Save screenshot", "", "PNG Files (*.png)")
+        if fileName:
+            try:
+                self.viewer.screenshot(filename=fileName)
+                print(f"Screenshot saved to: {fileName}")
+            except Exception as e:
+                print(f"Error saving screenshot: {e}")
 
     def load_nifti_button_behavior(self):
         file_path, _ = QFileDialog.getOpenFileName(self, "Load a NIfTI file", "",
