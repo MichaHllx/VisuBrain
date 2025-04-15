@@ -59,7 +59,7 @@ class Converter:
             fiber = {
                 'NrOfPoints': len(streamline),
                 'Points': [
-                    [float(point[0]), float(point[1]), float(point[2]), 255, 255, 255]
+                    [float(point[0]), float(point[1]), float(point[2]), 255, 0, 0]
                     for point in streamline
                 ]
             }

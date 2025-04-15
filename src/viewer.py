@@ -96,29 +96,84 @@ class PyVistaViewer(QtInteractor):
         self.render()
         return True
 
-    def show_tractogram(self, tracto_obj):
+    def show_tractogram(self, tracto_obj, show_points=False):
+        """
+          - Red = axe X
+          - Green = axe Y
+          - Blue = axe Z
+        """
         streamlines = tracto_obj.get_streamlines()
-        try:
-            points = np.vstack([s for s in streamlines])
-        except Exception:
-            points = np.array([])
 
-        if points.size == 0:
+        if len(streamlines) == 0:
+            from PyQt6.QtWidgets import QMessageBox
             QMessageBox.warning(self, "Erreur", "No tractography data to display.")
             return
 
+        points_list = []
+        colors_list = []
+        connectivity = []  # (pour l'affichage des lignes)
+        offset = 0
+
+        for streamline in streamlines:
+            streamline = np.asarray(streamline)
+            n_points = streamline.shape[0]
+
+            if n_points < 2:
+                colors = np.tile(np.array([255, 255, 255], dtype=np.uint8), (n_points, 1))
+            else:
+                diffs = np.diff(streamline, axis=0) # calcul tangente de chaque point (dérivée)
+                print(diffs)
+                diffs = np.vstack([diffs, diffs[-1]]) # répéter dernière pour garder la mm size
+                norms = np.linalg.norm(diffs, axis=1, keepdims=True) # normalise le vecteur (size=1)
+                norms[norms == 0] = 1.0
+                tangents = diffs / norms
+                colors = (np.abs(tangents) * 255).astype(np.uint8)
+
+            points_list.append(streamline)
+            colors_list.append(colors)
+
+            # construction de la connectivité pour cette streamline
+            if not show_points:
+                cell = np.hstack(([n_points], np.arange(offset, offset + n_points)))
+                connectivity.append(cell)
+
+            offset += n_points
+
+        points = np.vstack(points_list)
+        colors = np.vstack(colors_list)
+
         poly = pv.PolyData(points)
-        self.tract_actors[tracto_obj.file_path] = self.add_mesh(poly)
+        poly["Colors"] = colors
+
+        if not show_points:
+            connectivity_flat = np.hstack(connectivity)
+            poly.lines = connectivity_flat
+            point_size = 0
+            ambient = 0.3
+        else:
+            point_size = 2
+            ambient = 0
+
+        actor = self.add_mesh(poly,
+                              scalars="Colors",
+                              rgb=True,
+                              render_lines_as_tubes=not show_points,
+                              line_width=2,
+                              point_size=point_size,
+                              ambient=ambient)
+
+        self.tract_actors[tracto_obj.file_path] = actor
         self.render()
         return True
 
     def set_file_visibility(self, file_path, visible):
-        for axis in ["axial", "coronal", "sagittal"]:
-            key = file_path + axis + "_slice"
-            if key in self.nifti_slice_actors:
-                self.nifti_slice_actors[key].SetVisibility(visible)
         if file_path in self.tract_actors:
             self.tract_actors[file_path].SetVisibility(visible)
+        else:
+            for axis in ["axial", "coronal", "sagittal"]:
+                key = file_path + axis + "_slice"
+                if key in self.nifti_slice_actors:
+                    self.nifti_slice_actors[key].SetVisibility(visible)
         self.render()
 
     def update_slices(self, axis, value, opacity=0.5):
