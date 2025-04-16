@@ -97,46 +97,7 @@ class PyVistaViewer(QtInteractor):
         return True
 
     def show_tractogram(self, tracto_obj, show_points=False):
-        """
-          - Red = axe X
-          - Green = axe Y
-          - Blue = axe Z
-        """
-        streamlines = tracto_obj.get_streamlines()
-
-        if len(streamlines) == 0:
-            from PyQt6.QtWidgets import QMessageBox
-            QMessageBox.warning(self, "Erreur", "No tractography data to display.")
-            return
-
-        points_list = []
-        colors_list = []
-        connectivity = []  # (pour l'affichage des lignes)
-        offset = 0
-
-        for streamline in streamlines:
-            streamline = np.asarray(streamline)
-            n_points = streamline.shape[0]
-
-            if n_points < 2:
-                colors = np.tile(np.array([255, 255, 255], dtype=np.uint8), (n_points, 1))
-            else:
-                diffs = np.diff(streamline, axis=0) # calcul tangente de chaque point (dérivée)
-                diffs = np.vstack([diffs, diffs[-1]]) # répéter dernière pour garder la mm size
-                norms = np.linalg.norm(diffs, axis=1, keepdims=True) # normalise le vecteur (size=1)
-                norms[norms == 0] = 1.0
-                tangents = diffs / norms
-                colors = (np.abs(tangents) * 255).astype(np.uint8)
-
-            points_list.append(streamline)
-            colors_list.append(colors)
-
-            # construction de la connectivité pour cette streamline
-            if not show_points:
-                cell = np.hstack(([n_points], np.arange(offset, offset + n_points)))
-                connectivity.append(cell)
-
-            offset += n_points
+        points_list, colors_list, connectivity = tracto_obj.get_color_points(show_points)
 
         points = np.vstack(points_list)
         colors = np.vstack(colors_list)
