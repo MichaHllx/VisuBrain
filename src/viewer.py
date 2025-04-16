@@ -64,13 +64,13 @@ class PyVistaViewer(QtInteractor):
         slice_sagittal = self.slices_actor.slice(normal=[1, 0, 0], origin=[x // 2, 0, 0])
 
         self.nifti_slice_actors[self.working_nifti_obj.file_path + "axial_slice"] = (
-            self.add_mesh(slice_axial, opacity=0.5, cmap='gray', show_scalar_bar=False)
+            self.add_mesh(slice_axial, opacity=0.5, show_scalar_bar=False)
         )
         self.nifti_slice_actors[self.working_nifti_obj.file_path + "coronal_slice"] = (
-            self.add_mesh(slice_coronal, opacity=0.5, cmap='gray', show_scalar_bar=False)
+            self.add_mesh(slice_coronal, opacity=0.5, show_scalar_bar=False)
         )
         self.nifti_slice_actors[self.working_nifti_obj.file_path + "sagittal_slice"] = (
-            self.add_mesh(slice_sagittal, opacity=0.5, cmap='gray', show_scalar_bar=False)
+            self.add_mesh(slice_sagittal, opacity=0.5, show_scalar_bar=False)
         )
         self.render()
         return True

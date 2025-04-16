@@ -254,10 +254,7 @@ class WindowApp(QWidget):
             self.viewer.set_working_nifti_obj(nifti_object)
             self._set_sliders_values(nifti_object.get_dimensions())
 
-            if self.mode_combo.currentText() == "Slices":
-                if self.viewer.show_nifti_slices():
-                    pass
-            else:
+            if self.mode_combo.currentText() == "Volume 3D":
                 self.viewer.show_nifti_volume()
 
     def _set_sliders_values(self, dimensions):
