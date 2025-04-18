@@ -21,52 +21,28 @@ class WindowApp(QWidget):
         self.setWindowTitle("VisuBrain")
         self.setGeometry(20, 20, 3000, 900)
         self.main_layout = QVBoxLayout()
+
         self.loader = FileLoader()
 
         # barre du menu
-        self.menu_bar = QMenuBar(self)
-        self.main_layout.setMenuBar(self.menu_bar)
-        # Menu "Fichier"
-        file_menu = QMenu("File", self)
-        self.menu_bar.addMenu(file_menu)
-        # menu "Statistiques"
-        stat_menu = QMenu("Statistics", self)
-        self.menu_bar.addMenu(stat_menu)
-
-        # Action pour load un fichier NIfTI
-        load_nifti_action = QAction("Load a NIfTI file (.nii, .nii.gz)", self)
-        load_nifti_action.triggered.connect(self.load_nifti_button_behavior)
-        file_menu.addAction(load_nifti_action)
-        # Action pour load un fichier de tractographie
-        load_trk_action = QAction("Load a tractography file (.trk, .tck)", self)
-        load_trk_action.triggered.connect(self.load_trk_button_behavior)
-        file_menu.addAction(load_trk_action)
-        # action pour prendre un screenshot
-        screenshot_action = QAction("Take a screenshot", self)
-        screenshot_action.triggered.connect(self.take_screenshot)
-        file_menu.addAction(screenshot_action)
-
-        # action pour voir les stats des tracts load
-        view_stats_tract_action = QAction("View tracts statistics", self)
-        stat_menu.addAction(view_stats_tract_action)
+        self.create_menu_bar()
 
         # 2 tabs : viewer and converter
-        self.tabs = QTabWidget()
-        self.main_layout.addWidget(self.tabs)
+        tabs = QTabWidget()
+        self.main_layout.addWidget(tabs)
 
         # visualization tab
         self.visualization_tab = QWidget()
-        self.viz_layout = None
         self.left_control_panel = None
         self.right_control_panel = None
-        self.bg_combo = None
         self.opacity_slider = None
         self.slice_opacity = 0.5
         self.slice_controls = None
         self.tracto_checkboxes = {}
         self.loaded_nifti_map = {}
+        self.user_folders = []
         self.viewer = PyVistaViewer(self)
-        self.tabs.addTab(self.visualization_tab, "Viewer")
+        tabs.addTab(self.visualization_tab, "Viewer")
         self.init_visualization_tab()
 
         # converter tab
@@ -75,14 +51,43 @@ class WindowApp(QWidget):
         self.drop_label = None
         self.download_button = None
         self.load_button = None
-        self.tabs.addTab(self.converter_tab, "Converter")
+        tabs.addTab(self.converter_tab, "Converter")
         self.init_converter_tab()
 
         self.setLayout(self.main_layout)
 
+    def create_menu_bar(self):
+        menu_bar = QMenuBar(self)
+        self.main_layout.setMenuBar(menu_bar)
+
+        # Menu "Fichier"
+        file_menu = QMenu("File", self)
+        menu_bar.addMenu(file_menu)
+
+            # Action pour load un fichier NIfTI
+        load_nifti_action = QAction("Load a NIfTI file (.nii, .nii.gz)", self)
+        load_nifti_action.triggered.connect(self.load_nifti_button_behavior)
+        file_menu.addAction(load_nifti_action)
+            # Action pour load un fichier de tractographie
+        load_trk_action = QAction("Load a tractography file (.trk, .tck)", self)
+        load_trk_action.triggered.connect(self.load_trk_button_behavior)
+        file_menu.addAction(load_trk_action)
+            # action pour prendre un screenshot
+        screenshot_action = QAction("Take a screenshot", self)
+        screenshot_action.triggered.connect(self.take_screenshot)
+        file_menu.addAction(screenshot_action)
+
+        # Menu "Statistiques"
+        stat_menu = QMenu("Statistics", self)
+        menu_bar.addMenu(stat_menu)
+
+            # action pour voir les stats des tracts load
+        view_stats_tract_action = QAction("View tracts statistics", self)
+        stat_menu.addAction(view_stats_tract_action)
+
     def init_visualization_tab(self):
         # main layout for viz tab
-        self.viz_layout = QHBoxLayout()
+        viz_layout = QHBoxLayout()
         self.left_control_panel = QVBoxLayout()
         self.right_control_panel = QVBoxLayout()
 
@@ -112,12 +117,12 @@ class WindowApp(QWidget):
         # Paramètre pour changer le background
         bg_layout = QHBoxLayout()
         bg_label = QLabel("Background:")
-        self.bg_combo = QComboBox()
-        self.bg_combo.addItem("White")
-        self.bg_combo.addItem("Dark")
-        self.bg_combo.currentTextChanged.connect(self.change_background_color)
+        bg_combo = QComboBox()
+        bg_combo.addItem("White")
+        bg_combo.addItem("Dark")
+        bg_combo.currentTextChanged.connect(self.change_background_color)
         bg_layout.addWidget(bg_label)
-        bg_layout.addWidget(self.bg_combo)
+        bg_layout.addWidget(bg_combo)
         self.left_control_panel.addLayout(bg_layout)
 
         # Paramètre pour l'opacité des slices
@@ -168,11 +173,11 @@ class WindowApp(QWidget):
         self.reset_view_button.clicked.connect(self.reset_cam_zoom)
         self.right_control_panel.addWidget(self.reset_view_button)
 
-        self.viz_layout.addLayout(self.left_control_panel, stretch=1) # 20% de l'espace pour le control panel
-        self.viz_layout.addWidget(self.viewer, stretch=4)  # 80% de l'espace pour le viewer
-        self.viz_layout.addLayout(self.right_control_panel, stretch=1)
+        viz_layout.addLayout(self.left_control_panel, stretch=1) # 20% de l'espace pour le control panel
+        viz_layout.addWidget(self.viewer, stretch=4)  # 80% de l'espace pour le viewer
+        viz_layout.addLayout(self.right_control_panel, stretch=1)
 
-        self.visualization_tab.setLayout(self.viz_layout)
+        self.visualization_tab.setLayout(viz_layout)
 
     def nifti_selection_changed(self, selected_label):
         """Callback quand on change la sélection des NIfTI load."""
