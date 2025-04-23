@@ -9,14 +9,14 @@ class TractographyFile:
 
     def __init__(self, file_path: str, reference_nifti=None):
         self.file_path = file_path
-        self.reference_nifti = reference_nifti  # objet "NiftiFile"
+        self.reference_nifti = reference_nifti
         self.streamlines, self.raw_data = self._load_streamlines()
 
     def _load_streamlines(self):
         if self.file_path.endswith(".tck"):
             if not self.reference_nifti:
                 QMessageBox.critical(None, "Error", "A tck file needs an anatomical reference image beforehand.")
-                return None, None
+                return
             tracto = load_tractogram(self.file_path, self.reference_nifti.file_path)
         else:
             tracto = load_tractogram(self.file_path, 'same')
