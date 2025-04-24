@@ -69,6 +69,29 @@ class BinaryFbrFile:
                 group['fibers'] = fibers
                 self._groups.append(group)
 
+    def fiber_coordinates(self):
+        coordinates = []
+        for group in self._groups:
+            for fiber in group['fibers']:
+                coordinates.append(fiber['points'])
+        return coordinates
+
+    def header(self):
+        dico =  {
+            'FBRFile' : self._fbr_file,
+            'Animate' : ','.join([str(g['animate']) for g in self._groups]),
+            'Color' : ','.join([str(g['color']) for g in self._groups]),
+            'CoordsType' : self._coords_type,
+            'FibersOrigin' : self._fibers_origin,
+            'FileVersion' : self._file_version,
+            'Name' : ','.join([g['name'] for g in self._groups]),
+            'NrOfFibers' : ','.join([str(len(g['fibers'])) for g in self._groups]),
+            'NrOfGroups' : len(self._groups),
+            'Thickness' : ','.join([str(g['thickness']) for g in self._groups]),
+            'Visible' : ','.join([str(g['visible']) for g in self._groups])
+        }
+        return dico.__str__()
+
     @staticmethod
     def write_fbr(output_fbr_file_path, header, fibers):
         with open(output_fbr_file_path, 'wb') as f:
@@ -114,26 +137,3 @@ class BinaryFbrFile:
 
                     # toutes les couleurs B
                     f.write(struct.pack(f'<{fiber["NrOfPoints"]}B', *(point[5] for point in fiber['Points'])))
-
-    def get_fiber_coordinates(self):
-        coordinates = []
-        for group in self._groups:
-            for fiber in group['fibers']:
-                coordinates.append(fiber['points'])
-        return coordinates
-
-    def get_header(self):
-        dico =  {
-            'FBRFile' : self._fbr_file,
-            'Animate' : ','.join([str(g['animate']) for g in self._groups]),
-            'Color' : ','.join([str(g['color']) for g in self._groups]),
-            'CoordsType' : self._coords_type,
-            'FibersOrigin' : self._fibers_origin,
-            'FileVersion' : self._file_version,
-            'Name' : ','.join([g['name'] for g in self._groups]),
-            'NrOfFibers' : ','.join([str(len(g['fibers'])) for g in self._groups]),
-            'NrOfGroups' : len(self._groups),
-            'Thickness' : ','.join([str(g['thickness']) for g in self._groups]),
-            'Visible' : ','.join([str(g['visible']) for g in self._groups])
-        }
-        return dico.__str__()
