@@ -1,14 +1,15 @@
+# visubrain/core/converter.py
 import os
 import numpy as np
 
 from nibabel.streamlines import Tractogram, TrkFile
 from dipy.io.streamline import load_tractogram
 
-from fbr_file import BinaryFbrFile
+from visubrain.io.fbr import BinaryFbrFile
+from visubrain.io.tractography import TractographyFile
 
 
 class Converter:
-
     def __init__(self, input_file: str, output_file: str, conversion_type: str):
         self.input_file = input_file
         self.output_file = output_file
@@ -37,7 +38,7 @@ class Converter:
         elif self.conversion_type == "fbr_to_trk":
             self._convert_fbr_to_trk()
         else:
-            raise ValueError("Conversion type unsupported. Please use 'trk_to_fbr' or 'fbr_to_trk'.")
+            raise ValueError("Conversion type unsupported. Should be 'trk_to_fbr' or 'fbr_to_trk'.")
 
     def _convert_trk_to_fbr(self):
         # Charger le fichier .trk
@@ -46,21 +47,26 @@ class Converter:
         sft.to_corner()
         streamlines = sft.streamlines
 
-        header, fibers = self._prepare_fbr_data_from_trk(streamlines)
+        tracto_obj = TractographyFile(self.input_file)
+        points, colors, connectivity = tracto_obj.get_color_points(show_points=False)
+        print(len(colors), len(streamlines))
+
+        header, fibers = self._prepare_fbr_data_from_trk(streamlines, colors)
 
         new_fbr = BinaryFbrFile()
         new_fbr.write_fbr(self.output_file, header, fibers)
 
     @staticmethod
-    def _prepare_fbr_data_from_trk(streamlines):
+    def _prepare_fbr_data_from_trk(streamlines, colors):
 
         fibers = []
-        for streamline in streamlines:
+        for streamline, color in zip(streamlines, colors):
             fiber = {
                 'NrOfPoints': len(streamline),
                 'Points': [
-                    [float(point[0]), float(point[1]), float(point[2]), 255, 255, 255]
-                    for point in streamline
+                    [float(point[0]), float(point[1]), float(point[2]),
+                     int(rgb[0]), int(rgb[1]), int(rgb[2])]
+                    for point, rgb in zip(streamline, color)
                 ]
             }
             fibers.append(fiber)
