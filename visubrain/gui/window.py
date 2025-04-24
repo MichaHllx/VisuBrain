@@ -10,7 +10,7 @@ from PyQt6.QtCore import Qt
 from PyQt6.QtGui import QAction
 
 from visubrain.gui.viewer import PyVistaViewer
-from visubrain.gui.user_folder import UserFolder
+from visubrain.gui.session import Session
 from visubrain.core.converter import Converter
 from visubrain.io.loader import load_nifti, load_tractography
 
@@ -29,8 +29,8 @@ class WindowApp(QWidget):
 
         self._build_menu_bar()
         # 2 tabs : viewer and converter
-        self._folders = []
-        self._current_folder = None
+        self._sessions = []
+        self._current_session = None
         self._init_tabs()
 
         self.setLayout(self._main_layout)
@@ -44,11 +44,11 @@ class WindowApp(QWidget):
         menu_bar.addMenu(file_menu)
 
             # Action pour load un fichier NIfTI
-        load_nifti_action = QAction("Load a volume/anatomical file (.nii, .nii.gz)", self)
+        load_nifti_action = QAction("Add a volume/anatomical file (.nii, .nii.gz)", self)
         load_nifti_action.triggered.connect(self._on_load_volume)
         file_menu.addAction(load_nifti_action)
             # Action pour load un fichier de tractographie
-        load_trk_action = QAction("Load a tractography file (.trk, .tck)", self)
+        load_trk_action = QAction("Add a tractography file (.trk, .tck)", self)
         load_trk_action.triggered.connect(self._on_load_streamlines)
         file_menu.addAction(load_trk_action)
             # action pour prendre un screenshot
@@ -78,7 +78,7 @@ class WindowApp(QWidget):
         self._opacity_slider = QSlider(Qt.Horizontal)
         self.slice_controls = {}
         self.tracto_checkboxes = {}
-        self._user_folders = []
+        self._user_sessions = []
         self._tabs.addTab(self._visualization_tab, "Viewer")
         self._build_viz_tab()
 
@@ -94,19 +94,19 @@ class WindowApp(QWidget):
         # main layout for viz tab
         viz_layout = QHBoxLayout()
 
-        # folder selector
-        folder_selector_layout = QHBoxLayout()
-        self.folder_selector = QComboBox()
-        self.folder_selector.currentTextChanged.connect(self.switch_folder)
-        folder_selector_layout.addWidget(self.folder_selector)
-        self.folder_selector.setVisible(False)
-        self._left_control_panel.insertLayout(0, folder_selector_layout)
+        # session selector
+        session_selector_layout = QHBoxLayout()
+        self.session_selector = QComboBox()
+        self.session_selector.currentTextChanged.connect(self.switch_session)
+        session_selector_layout.addWidget(self.session_selector)
+        self.session_selector.setVisible(False)
+        self._left_control_panel.insertLayout(0, session_selector_layout)
 
-        # paramètre pour renommer le folder
+        # paramètre pour renommer la session
         rename_layout = QHBoxLayout()
         self.rename_lineedit = QLineEdit()
-        self.rename_button = QPushButton("Rename folder")
-        self.rename_button.clicked.connect(self.rename_current_folder)
+        self.rename_button = QPushButton("New session name")
+        self.rename_button.clicked.connect(self.rename_current_session)
         rename_layout.addWidget(self.rename_lineedit)
         rename_layout.addWidget(self.rename_button)
         self.rename_button.setVisible(False)
@@ -209,17 +209,14 @@ class WindowApp(QWidget):
         self.drop_label.installEventFilter(self)
 
     def rendering_mode_selection(self, mode):
-        if mode == "Slices":
-            self._viewer.show_nifti_slices()
-        elif mode == "Volume 3D":
-            self._viewer.show_nifti_volume()
+        self._viewer.render_mode(mode)
 
     def change_slice_opacity(self, value):
-        self._current_folder.opacity = value / 100.0 # valeur flottante entre 0 et 1
+        self._current_session.opacity = value / 100.0 # valeur flottante entre 0 et 1
         if self._viewer.working_nifti_obj:
             for orient in ["Axial", "Coronal", "Sagittal"]:
                 current_value = self.slice_controls[orient][0].value()
-                self._viewer.update_slices(orient.lower(), current_value, opacity=self._current_folder.opacity)
+                self._viewer.update_slices(orient.lower(), current_value, opacity=self._current_session.opacity)
 
     def reset_cam_zoom(self):
         self.zoom_slider.setValue(100)
@@ -235,25 +232,41 @@ class WindowApp(QWidget):
                 QMessageBox.information(self, "Screenshot", f"Error saving screenshot: {e}")
 
     def view_tracts_statistics(self):
-        if not self._current_folder or not self._current_folder.tracts:
+        if not self._current_session or not self._current_session.tracts:
             QMessageBox.information(self, "Tractography Statistics", "No tractography data available")
             return
 
-        report_lines = self._current_folder.tract_statistics()
+        report_lines = self._current_session.tract_statistics()
         QMessageBox.information(self, "Tractography Statistics", "\n\n".join(report_lines))
 
     def _on_load_volume(self):
-        file_path, _ = QFileDialog.getOpenFileName(self, "Load a volume/anatomical file", "", "(*.nii *.nii.gz)")
+        file_path, _ = QFileDialog.getOpenFileName(self, "Add a volume/anatomical file", "", "(*.nii *.nii.gz)")
         if file_path:
             nifti_object = load_nifti(file_path)
 
             if not nifti_object: return
 
+            tracto_path_list = []
+            if self._current_session and self._current_session.volume_obj is None:
+                index = self.session_selector.currentIndex()
+                for tp in self._current_session.tracts.keys():
+                    tracto_path_list.append(tp)
+                self._sessions.remove(self._current_session)
+                self.session_selector.removeItem(index)
+
             filename = os.path.basename(file_path)
-            self._create_folder(nifti_object, filename)
+            self._create_session(nifti_object, filename)
             self._viewer.set_working_nifti_obj(nifti_object)
             self._set_sliders_values(nifti_object.get_dimensions())
             self.rendering_mode_selection(self.mode_combo.currentText())
+
+            for tp in tracto_path_list:
+                to = load_tractography(tp, nifti_ref=nifti_object)
+                self._current_session.add_tract(to)
+                self._viewer.show_tractogram(to)
+                self.add_tracto_checkbox(tp)
+            self._current_session.apply()
+
 
     def _set_sliders_values(self, dimensions):
         if len(dimensions) > 3:
@@ -272,86 +285,92 @@ class WindowApp(QWidget):
         self.slice_controls["Sagittal"][0].setMaximum(x - 1)
 
     def _on_load_streamlines(self):
-        file_path, _ = QFileDialog.getOpenFileName(self, "Load a tractography file", "", "(*.trk *.tck)")
+        file_path, _ = QFileDialog.getOpenFileName(self, "Add a tractography file", "", "(*.trk *.tck)")
         if file_path:
             tracto_obj = load_tractography(file_path, nifti_ref=self._viewer.working_nifti_obj)
 
             if not tracto_obj: return
 
-            if self._current_folder:
-                self._current_folder.add_tract(tracto_obj)
+            if self._current_session:
+                self._current_session.add_tract(tracto_obj)
             else:
-                self._create_folder(None, os.path.basename(file_path))
-                self._current_folder.add_tract(tracto_obj)
+                self._create_session(None, os.path.basename(file_path))
+                self._current_session.add_tract(tracto_obj)
 
             self._viewer.show_tractogram(tracto_obj)
             self.add_tracto_checkbox(file_path)
 
-    def _create_folder(self, anat_obj, filename):
+    def _create_session(self, anat_obj, filename):
         nifti_obj = anat_obj
-        display_name = f"Folder {len(self._folders) + 1}: " + filename
-        folder = UserFolder(display_name, nifti_obj, self._viewer)
-        self._folders.append(folder)
-        self.folder_selector.addItem(display_name)
-        self.folder_selector.setCurrentText(display_name)
-        self._current_folder = folder
-        self.folder_selector.setVisible(True)
+        display_name = f"session {len(self._sessions) + 1}: " + filename
+        session = Session(display_name, nifti_obj, self._viewer)
+        self._sessions.append(session)
+        self.session_selector.addItem(display_name)
+        self.session_selector.setCurrentText(display_name)
+        self._current_session = session
+        self.session_selector.setVisible(True)
         self.rename_button.setVisible(True)
 
-    def switch_folder(self, selected_label):
-        folder = next((f for f in self._folders if f.display_name == selected_label), None)
-        if not folder: return
+    def switch_session(self, selected_label):
+        session = next((f for f in self._sessions if f.display_name == selected_label), None)
+        if not session: return
 
-        # stocker l'état du current folder
-        if self._current_folder and self._current_folder.volume_obj:
-            for ori, (slider, _) in self.slice_controls.items():
-                self._current_folder.slice_positions[ori.lower()] = slider.value()
-            self._current_folder.opacity = self._opacity_slider.value() / 100.0
-            self._current_folder.zoom_factor = self.zoom_slider.value() / 100.0
-            self._current_folder.background_color = self._viewer.background_color.name
+        self._save_current_session_state()
+        self._current_session = session
 
-        self._current_folder = folder
-        folder.apply()
+        session.apply()
 
-        # màj UI avec le nouveau folder
-        if folder.volume_obj is not None:
-            dims = folder.volume_obj.get_dimensions()
+        # màj UI avec le nouveau session
+        if session.volume_obj is not None:
+            dims = session.volume_obj.get_dimensions()
             self._set_sliders_maximum(dims)
             for ori, (slider, _) in self.slice_controls.items():
-                slider.setValue(folder.slice_positions[ori.lower()])
-            self._opacity_slider.setValue(int(folder.opacity * 100))
-            self.zoom_slider.setValue(int(folder.zoom_factor * 100))
-            self._viewer.change_background(folder.background_color)
+                slider.setValue(session.slice_positions[ori.lower()])
+            self._opacity_slider.setValue(int(session.opacity * 100))
+            self.zoom_slider.setValue(int(session.zoom_factor * 100))
+            self._viewer.change_background(session.background_color)
 
         if self.tracto_checkboxes:
             for file_path, checkbox in self.tracto_checkboxes.items():
-                checkbox.setVisible(checkbox.associated_folder == selected_label)
-                if checkbox.associated_folder == selected_label:
+                checkbox.setVisible(checkbox.associated_session == selected_label)
+                if checkbox.associated_session == selected_label:
                     self._viewer.set_file_visibility(file_path, checkbox.isChecked())
                 else:
                     self._viewer.set_file_visibility(file_path, False)
 
-    def rename_current_folder(self):
+    def _save_current_session_state(self):
+        if self._current_session and self._current_session.volume_obj:
+            for ori, (slider, _) in self.slice_controls.items():
+                self._current_session.slice_positions[ori.lower()] = slider.value()
+            self._current_session.opacity = self._opacity_slider.value() / 100.0
+            self._current_session.zoom_factor = self.zoom_slider.value() / 100.0
+            self._current_session.background_color = self._viewer.background_color.name
+
+    def rename_current_session(self):
         self.rename_lineedit.setVisible(True)
-        if not self._current_folder:
+        self.rename_button.setText("Rename")
+        if not self._current_session:
             return
         new_name = self.rename_lineedit.text().strip()
         if not new_name:
             return
 
-        old_name = self._current_folder.display_name
-        self._current_folder.display_name = new_name
+        old_name = self._current_session.display_name
+        self._current_session.display_name = new_name
 
-        index = self.folder_selector.findText(old_name)
+        index = self.session_selector.findText(old_name)
         if index != -1:
-            self.folder_selector.setItemText(index, new_name)
+            self.session_selector.setItemText(index, new_name)
 
         for file_path, checkbox in self.tracto_checkboxes.items():
-            if checkbox.associated_folder == old_name:
-                checkbox.associated_folder = new_name
+            if checkbox.associated_session == old_name:
+                checkbox.associated_session = new_name
+                checkbox.setVisible(True)
 
+        self._current_session.apply()
         self.rename_lineedit.clear()
         self.rename_lineedit.setVisible(False)
+        self.rename_button.setText("New session name")
 
     def add_tracto_checkbox(self, file_path):
         checkbox = QCheckBox(f"Tractography: {os.path.basename(file_path)}")
@@ -359,21 +378,21 @@ class WindowApp(QWidget):
         checkbox.stateChanged.connect(lambda state, f=file_path: self._viewer.set_file_visibility(f, state==2))
         self._left_control_panel.addWidget(checkbox)
 
-        checkbox.associated_folder = self.folder_selector.currentText()
+        checkbox.associated_session = self.session_selector.currentText()
         self.tracto_checkboxes[file_path] = checkbox
 
     def change_slices_position(self, value, orientation):
         self.slice_controls[orientation][1].setText(str(value))
 
         if self._viewer.working_nifti_obj:
-            self._viewer.schedule_slice_update(orientation.lower(), value, self._current_folder.opacity)
+            self._viewer.schedule_slice_update(orientation.lower(), value, self._current_session.opacity)
 
     def manual_slice_update(self, orientation, input_box):
         try:
             value = int(input_box.text())
             if 0 <= value < self.slice_controls[orientation][0].maximum():
                 self.slice_controls[orientation][0].setValue(value)
-                self._viewer.update_slices(orientation.lower(), value, opacity=self._current_folder.opacity)
+                self._viewer.update_slices(orientation.lower(), value, opacity=self._current_session.opacity)
         except ValueError:
             pass
 

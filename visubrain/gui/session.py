@@ -1,11 +1,14 @@
-# user_folder.py
+# session.py
 
 import numpy as np
 
 
-class UserFolder:
+class Session:
+    _id_counter = 0
 
     def __init__(self, display_name, volume_obj, viewer):
+        self._id = Session._id_counter
+        Session._id_counter += 1
         self.display_name = display_name
         self.volume_obj = volume_obj
         self.viewer = viewer
@@ -15,9 +18,9 @@ class UserFolder:
             self.slice_positions = {'axial': volume_obj.get_dimensions()[2] // 2,
                                     'coronal': volume_obj.get_dimensions()[1] // 2,
                                     'sagittal': volume_obj.get_dimensions()[0] // 2}
-            self.opacity = 0.5
-            self.zoom_factor = 1.0
-            self.background_color = "white"
+        self.opacity = 0.5
+        self.zoom_factor = 1.0
+        self.background_color = "white"
 
         # pour le content
         self.tracts = {}    # {file_path: tracto_obj}
@@ -29,6 +32,9 @@ class UserFolder:
     def add_roi(self, roi_obj):
         self.rois[roi_obj.file_path] = roi_obj
 
+    def get_uid(self):
+        return self._id
+
     def apply(self):
         """Nettoie le viewer + charge NIfTI + tracts (+ ROIs)"""
         v = self.viewer
@@ -36,18 +42,13 @@ class UserFolder:
         if self.volume_obj is not None:
             v.set_working_nifti_obj(self.volume_obj)
 
-            if v.current_mode == 'Slices':
-                v.show_nifti_slices()
-            else:
-                v.show_nifti_volume()
+            v.render_mode(v.current_mode)
 
             for axis, pos in self.slice_positions.items():
                 v.update_slices(axis, pos, self.opacity)
 
         for tract in self.tracts.values():
             v.show_tractogram(tract, show_points=False)
-
-        # TODO : same with ROI
 
     def tract_statistics(self):
         report_lines = []

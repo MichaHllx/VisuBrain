@@ -6,6 +6,10 @@ from PyQt6.QtWidgets import QMessageBox
 from pyvistaqt import QtInteractor
 
 
+def _slice_actor_key(file_path: str, axis: str) -> str:
+    return f"{file_path}::{axis}_slice"
+
+
 class PyVistaViewer(QtInteractor):
 
     def __init__(self, parent=None):
@@ -42,10 +46,33 @@ class PyVistaViewer(QtInteractor):
             self.update_slices(axis, value, opacity)
             self.pending_update = None
 
-    def show_nifti_slices(self):
+    # def show_nifti_slices(self):
+    #     if self.working_nifti_obj is None:
+    #         return False
+    #     self.current_mode = "Slices"
+    #
+    #     data = self.working_nifti_obj.data
+    #     shape = self.working_nifti_obj.get_dimensions()
+    #
+    #     if len(shape) != 3:
+    #         QMessageBox.critical(self, "Erreur", "Bad file dimension")
+    #         return False
+    #
+    #     self.slices_actor = pv.wrap(data)
+    #     self._clear_previous_actors()
+    #
+    #     x, y, z = shape
+    #     self._create_slice_actor([0, 0, 1], [0, 0, z // 2], "axial", update_if_exists=False, opacity=0.5)
+    #     self._create_slice_actor([0, 1, 0], [0, y // 2, 0], "coronal", update_if_exists=False, opacity=0.5)
+    #     self._create_slice_actor([1, 0, 0], [x // 2, 0, 0], "sagittal", update_if_exists=False, opacity=0.5)
+    #
+    #     self.render()
+    #     return True
+
+    def render_mode(self, mode: str) -> bool:
         if self.working_nifti_obj is None:
             return False
-        self.current_mode = "Slices"
+
         data = self.working_nifti_obj.data
         shape = self.working_nifti_obj.get_dimensions()
 
@@ -53,57 +80,79 @@ class PyVistaViewer(QtInteractor):
             QMessageBox.critical(self, "Erreur", "Bad file dimension")
             return False
 
-        self.slices_actor = pv.wrap(data)
+        self._clear_previous_actors()
 
-        if self.volume_actor is not None:
-            self.remove_actor(self.volume_actor)
-            self.volume_actor = None
-        for slice_actor in self.nifti_slice_actors.values():
-            if slice_actor is not None:
-                self.remove_actor(slice_actor)
-        self.nifti_slice_actors = {}
+        if mode.lower() == "slices":
+            self.current_mode = "Slices"
+            self.slices_actor = pv.wrap(data)
 
-        x, y, z = shape
-        slice_axial = self.slices_actor.slice(normal=[0, 0, 1], origin=[0, 0, z // 2])
-        slice_coronal = self.slices_actor.slice(normal=[0, 1, 0], origin=[0, y // 2, 0])
-        slice_sagittal = self.slices_actor.slice(normal=[1, 0, 0], origin=[x // 2, 0, 0])
+            x, y, z = shape
+            self._create_slice_actor([0, 0, 1], [0, 0, z // 2], "axial", update_if_exists=False, opacity=0.5)
+            self._create_slice_actor([0, 1, 0], [0, y // 2, 0], "coronal", update_if_exists=False, opacity=0.5)
+            self._create_slice_actor([1, 0, 0], [x // 2, 0, 0], "sagittal", update_if_exists=False, opacity=0.5)
 
-        self.nifti_slice_actors[self.working_nifti_obj.file_path + "axial_slice"] = (
-            self.add_mesh(slice_axial, opacity=0.5, cmap='gray', show_scalar_bar=False)
-        )
-        self.nifti_slice_actors[self.working_nifti_obj.file_path + "coronal_slice"] = (
-            self.add_mesh(slice_coronal, opacity=0.5, cmap='gray', show_scalar_bar=False)
-        )
-        self.nifti_slice_actors[self.working_nifti_obj.file_path + "sagittal_slice"] = (
-            self.add_mesh(slice_sagittal, opacity=0.5, cmap='gray', show_scalar_bar=False)
-        )
+        elif mode.lower() == "volume 3d":
+            self.current_mode = "Volume 3D"
+            self.volume_actor = self._create_volume_actor(data)
+        else:
+            QMessageBox.warning(self, "Rendering Mode", f"Unsupported mode: {mode}")
+            return False
+
         self.render()
         return True
 
-    def show_nifti_volume(self):
-        if self.working_nifti_obj is None:
-            return False
-
-        self.current_mode = "Volume 3D"
-        data = self.working_nifti_obj.data
-        shape = self.working_nifti_obj.get_dimensions()
-
-        if len(shape) != 3:
-            QMessageBox.critical(self, "Erreur", "Bad file dimension")
-            return False
-
-        if self.volume_actor is not None:
+    def _clear_previous_actors(self):
+        if self.volume_actor:
             self.remove_actor(self.volume_actor)
             self.volume_actor = None
-        for slice_actor in self.nifti_slice_actors.values():
-            if slice_actor is not None:
-                self.remove_actor(slice_actor)
-        self.nifti_slice_actors = {}
+        for actor in self.nifti_slice_actors.values():
+            if actor:
+                self.remove_actor(actor)
+        self.nifti_slice_actors.clear()
 
-        self.volume_actor = self.add_volume(pv.wrap(data), opacity="sigmoid", cmap="gray", shade=True,
-                                            show_scalar_bar=False)
-        self.render()
-        return True
+    def _create_slice_actor(self, normal, origin, axis: str, update_if_exists=False, opacity=0.5):
+        if self.slices_actor is None:
+            return None
+
+        new_slice = self.slices_actor.slice(normal=normal, origin=origin)
+        key = _slice_actor_key(self.working_nifti_obj.file_path, axis)
+
+        if update_if_exists and key in self.nifti_slice_actors:
+            actor = self.nifti_slice_actors[key]
+            actor.mapper.SetInputData(new_slice)
+            actor.mapper.Update()
+            actor.GetProperty().SetOpacity(opacity)
+        else:
+            actor = self.add_mesh(new_slice, opacity=opacity, cmap='gray', show_scalar_bar=False)
+            self.nifti_slice_actors[key] = actor
+
+        return actor
+
+    # def show_nifti_volume(self):
+    #     if self.working_nifti_obj is None:
+    #         return False
+    #
+    #     self.current_mode = "Volume 3D"
+    #     data = self.working_nifti_obj.data
+    #     shape = self.working_nifti_obj.get_dimensions()
+    #
+    #     if len(shape) != 3:
+    #         QMessageBox.critical(self, "Erreur", "Bad file dimension")
+    #         return False
+    #
+    #     self._clear_previous_actors()
+    #     self.volume_actor = self._create_volume_actor(data)
+    #     self.render()
+    #     return True
+
+    def _create_volume_actor(self, data):
+        return self.add_volume(
+            pv.wrap(data),
+            opacity="sigmoid",
+            cmap="gray",
+            shade=True,
+            show_scalar_bar=False
+        )
 
     def show_tractogram(self, tracto_obj, show_points=False):
         if tracto_obj is None:
@@ -143,12 +192,15 @@ class PyVistaViewer(QtInteractor):
             self.tract_actors[file_path].SetVisibility(visible)
         else:
             for axis in ["axial", "coronal", "sagittal"]:
-                key = file_path + axis + "_slice"
+                key = _slice_actor_key(file_path, axis)
                 if key in self.nifti_slice_actors:
                     self.nifti_slice_actors[key].SetVisibility(visible)
         self.render()
 
     def update_slices(self, axis, value, opacity=0.5):
+        if self.working_nifti_obj is None:
+            return
+
         if axis == "axial":
             normal = [0, 0, 1]
             origin = [0, 0, int(value)]
@@ -161,19 +213,7 @@ class PyVistaViewer(QtInteractor):
         else:
             return
 
-        #volume = pv.wrap(self.working_nifti_obj.data)
-        if self.slices_actor is None: return
-        new_slice = self.slices_actor.slice(normal=normal, origin=origin)
-
-        key = self.working_nifti_obj.file_path + axis + "_slice"
-        if key in self.nifti_slice_actors:
-            # màj acteur existant
-            actor = self.nifti_slice_actors[key]
-            actor.mapper.SetInputData(new_slice)
-            actor.mapper.Update()
-            actor.GetProperty().SetOpacity(opacity)
-        else:
-            self.nifti_slice_actors[key] = self.add_mesh(new_slice, opacity=opacity, cmap='gray', show_scalar_bar=False)
+        self._create_slice_actor(normal, origin, axis, update_if_exists=True, opacity=opacity)
         self.render()
 
     def set_zoom(self, zoom_factor):
@@ -193,7 +233,9 @@ class PyVistaViewer(QtInteractor):
         self.render()
 
     def reset_view(self):
-        self.reset_camera(self.working_nifti_obj)
+        self.view_isometric()
+        self.reset_camera()
+        self.current_zoom_factor = 1.0
         self.render()
 
     def clear(self):
@@ -202,7 +244,7 @@ class PyVistaViewer(QtInteractor):
             self.volume_actor = None
         for actor in self.nifti_slice_actors.values(): self.remove_actor(actor)
         for actor in self.tract_actors.values(): self.remove_actor(actor)
-        # TODO : idem pour rois
+
         self.nifti_slice_actors.clear()
         self.tract_actors.clear()
         self.render()

@@ -68,3 +68,7 @@ class TractographyFile:
             offset += n_points
 
         return points_list, colors_list, connectivity
+
+    def update_reference(self, new_reference):
+        self.reference_nifti = new_reference
+        self.streamlines, self.raw_data = self._load_streamlines()
