@@ -1,0 +1,73 @@
+# user_folder.py
+
+import numpy as np
+
+
+class UserFolder:
+
+    def __init__(self, display_name, volume_obj, viewer):
+        self.display_name = display_name
+        self.volume_obj = volume_obj
+        self.viewer = viewer
+
+        if volume_obj is not None:
+            # pour la visu
+            self.slice_positions = {'axial': volume_obj.get_dimensions()[2] // 2,
+                                    'coronal': volume_obj.get_dimensions()[1] // 2,
+                                    'sagittal': volume_obj.get_dimensions()[0] // 2}
+            self.opacity = 0.5
+            self.zoom_factor = 1.0
+            self.background_color = "white"
+
+        # pour le content
+        self.tracts = {}    # {file_path: tracto_obj}
+        self.rois = {}      # {file_path: roi_obj}
+
+    def add_tract(self, tracto_obj):
+        self.tracts[tracto_obj.file_path] = tracto_obj
+
+    def add_roi(self, roi_obj):
+        self.rois[roi_obj.file_path] = roi_obj
+
+    def apply(self):
+        """Nettoie le viewer + charge NIfTI + tracts (+ ROIs)"""
+        v = self.viewer
+        v.clear()
+        if self.volume_obj is not None:
+            v.set_working_nifti_obj(self.volume_obj)
+
+            if v.current_mode == 'Slices':
+                v.show_nifti_slices()
+            else:
+                v.show_nifti_volume()
+
+            for axis, pos in self.slice_positions.items():
+                v.update_slices(axis, pos, self.opacity)
+
+        for tract in self.tracts.values():
+            v.show_tractogram(tract, show_points=False)
+
+        # TODO : same with ROI
+
+    def tract_statistics(self):
+        report_lines = []
+        for name, tracto_obj in self.tracts.items():
+            slines = tracto_obj.get_streamlines()
+            n_streams = len(slines)
+            lengths = []
+            for sl in slines:
+                pts = np.asarray(sl)
+                if pts.shape[0] < 2:
+                    continue
+                diffs = np.diff(pts, axis=0)
+                lengths.append(np.linalg.norm(diffs, axis=1).sum())
+            mean_len = np.mean(lengths) if lengths else 0.0
+            total_len = np.sum(lengths)
+            report_lines.append(
+                f"{name}\n"
+                f"  • Number of streamlines: {n_streams}\n"
+                f"  • Mean length: {mean_len:.1f}mm\n"
+                f"  • Total length: {total_len:.1f}mm\n"
+            )
+
+        return report_lines

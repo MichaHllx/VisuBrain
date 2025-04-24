@@ -1,15 +1,15 @@
+# visubrain/core/converter.py
 import os
 import numpy as np
 
 from nibabel.streamlines import Tractogram, TrkFile
 from dipy.io.streamline import load_tractogram
 
-from fbr_file import BinaryFbrFile
-from src.tractography_file import TractographyFile
+from visubrain.io.fbr import BinaryFbrFile
+from visubrain.io.tractography import TractographyFile
 
 
 class Converter:
-
     def __init__(self, input_file: str, output_file: str, conversion_type: str):
         self.input_file = input_file
         self.output_file = output_file

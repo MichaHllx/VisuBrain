@@ -23,12 +23,14 @@ class PyVistaViewer(QtInteractor):
         self.pending_update = None
 
         self.current_zoom_factor = 1.0
+        self.current_mode = "Slices"
 
         self.add_axes()
         self.show()
 
     def set_working_nifti_obj(self, nifti_obj):
         self.working_nifti_obj = nifti_obj
+        self.reset_view()
 
     def schedule_slice_update(self, axis, value, opacity):
         self.pending_update = (axis, value, opacity)
@@ -41,12 +43,15 @@ class PyVistaViewer(QtInteractor):
             self.pending_update = None
 
     def show_nifti_slices(self):
+        if self.working_nifti_obj is None:
+            return False
+        self.current_mode = "Slices"
         data = self.working_nifti_obj.data
         shape = self.working_nifti_obj.get_dimensions()
 
         if len(shape) != 3:
             QMessageBox.critical(self, "Erreur", "Bad file dimension")
-            return
+            return False
 
         self.slices_actor = pv.wrap(data)
 
@@ -76,6 +81,10 @@ class PyVistaViewer(QtInteractor):
         return True
 
     def show_nifti_volume(self):
+        if self.working_nifti_obj is None:
+            return False
+
+        self.current_mode = "Volume 3D"
         data = self.working_nifti_obj.data
         shape = self.working_nifti_obj.get_dimensions()
 
@@ -97,6 +106,9 @@ class PyVistaViewer(QtInteractor):
         return True
 
     def show_tractogram(self, tracto_obj, show_points=False):
+        if tracto_obj is None:
+            return
+
         points_list, colors_list, connectivity = tracto_obj.get_color_points(show_points)
 
         points = np.vstack(points_list)
@@ -150,6 +162,7 @@ class PyVistaViewer(QtInteractor):
             return
 
         #volume = pv.wrap(self.working_nifti_obj.data)
+        if self.slices_actor is None: return
         new_slice = self.slices_actor.slice(normal=normal, origin=origin)
 
         key = self.working_nifti_obj.file_path + axis + "_slice"
@@ -163,12 +176,33 @@ class PyVistaViewer(QtInteractor):
             self.nifti_slice_actors[key] = self.add_mesh(new_slice, opacity=opacity, cmap='gray', show_scalar_bar=False)
         self.render()
 
-    def set_zoom(self, new_zoom_factor):
+    def set_zoom(self, zoom_factor):
+        # 100 correspond à 1.0, donc il faut div par 100
+        new_zoom_factor = zoom_factor / 100.0
         relative_factor = new_zoom_factor / self.current_zoom_factor
         self.camera.Zoom(relative_factor)
         self.current_zoom_factor = new_zoom_factor
         self.render()
 
+    def change_background(self, color):
+        normalized_color = color.lower()
+        try:
+            self.set_background(normalized_color)
+        except AttributeError:
+            return
+        self.render()
+
     def reset_view(self):
         self.reset_camera(self.working_nifti_obj)
+        self.render()
+
+    def clear(self):
+        if self.volume_actor:
+            self.remove_actor(self.volume_actor)
+            self.volume_actor = None
+        for actor in self.nifti_slice_actors.values(): self.remove_actor(actor)
+        for actor in self.tract_actors.values(): self.remove_actor(actor)
+        # TODO : idem pour rois
+        self.nifti_slice_actors.clear()
+        self.tract_actors.clear()
         self.render()
