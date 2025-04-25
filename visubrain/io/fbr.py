@@ -1,3 +1,5 @@
+# visubrain/io/fbr.py
+
 import struct
 
 class BinaryFbrFile:
