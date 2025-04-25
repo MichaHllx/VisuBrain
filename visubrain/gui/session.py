@@ -1,5 +1,4 @@
-# session.py
-
+# visubrain/gui/session.py
 import numpy as np
 
 
@@ -21,31 +20,26 @@ class Session:
         self.opacity = 0.5
         self.zoom_factor = 1.0
         self.background_color = "white"
+        self.rendering_mode = "Slices"
 
         # pour le content
         self.tracts = {}    # {file_path: tracto_obj}
-        self.rois = {}      # {file_path: roi_obj}
+        # self.rois = {}      # {file_path: roi_obj}
 
     def add_tract(self, tracto_obj):
         self.tracts[tracto_obj.file_path] = tracto_obj
 
-    def add_roi(self, roi_obj):
-        self.rois[roi_obj.file_path] = roi_obj
+    # def add_roi(self, roi_obj):
+    #     self.rois[roi_obj.file_path] = roi_obj
 
     def get_uid(self):
         return self._id
 
     def apply(self):
-        """Nettoie le viewer + charge NIfTI + tracts (+ ROIs)"""
         v = self.viewer
-        v.clear()
         if self.volume_obj is not None:
             v.set_working_nifti_obj(self.volume_obj)
-
-            v.render_mode(v.current_mode)
-
-            for axis, pos in self.slice_positions.items():
-                v.update_slices(axis, pos, self.opacity)
+            v.render_mode(self.rendering_mode, self.opacity)
 
         for tract in self.tracts.values():
             v.show_tractogram(tract, show_points=False)

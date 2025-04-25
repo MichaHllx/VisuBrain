@@ -11,9 +11,9 @@ from PyQt6.QtGui import QAction
 
 from visubrain.gui.viewer import PyVistaViewer
 from visubrain.gui.session import Session
+from visubrain.gui.slice_controller import SliceControl
 from visubrain.core.converter import Converter
 from visubrain.io.loader import load_nifti, load_tractography
-
 
 class WindowApp(QWidget):
 
@@ -26,11 +26,11 @@ class WindowApp(QWidget):
         self._main_layout = QVBoxLayout()
 
         self._viewer = PyVistaViewer(self)
+        self._sessions = []
+        self._current_session = None
 
         self._build_menu_bar()
         # 2 tabs : viewer and converter
-        self._sessions = []
-        self._current_session = None
         self._init_tabs()
 
         self.setLayout(self._main_layout)
@@ -82,14 +82,6 @@ class WindowApp(QWidget):
         self._tabs.addTab(self._visualization_tab, "Viewer")
         self._build_viz_tab()
 
-    def _init_converter_tab(self):
-        self._converter_tab = QWidget()
-        self.converter_layout = None
-        self.drop_label = None
-        self.load_button = None
-        self._tabs.addTab(self._converter_tab, "Converter")
-        self._build_converter_tab()
-
     def _build_viz_tab(self):
         # main layout for viz tab
         viz_layout = QHBoxLayout()
@@ -118,21 +110,16 @@ class WindowApp(QWidget):
             h_layout = QHBoxLayout()
             label = QLabel(orientation)
             slider = QSlider(Qt.Horizontal)
-            slider.setMinimum(0)
-            slider.setMaximum(100)
-            slider.setValue(0)
-            slider.valueChanged.connect(lambda value, o=orientation: self.change_slices_position(value, o))
-
             input_box = QLineEdit()
             input_box.setFixedWidth(50)
-            input_box.returnPressed.connect(lambda o=orientation, box=input_box: self.manual_slice_update(o, box))
 
-            self.slice_controls[orientation] = (slider, input_box)
+            control = SliceControl(orientation, slider, input_box)
+            control.connect_slider_callback(self.change_slices_position)
+            self.slice_controls[orientation] = control
 
             h_layout.addWidget(label)
             h_layout.addWidget(slider)
             h_layout.addWidget(input_box)
-
             self._left_control_panel.addLayout(h_layout)
 
         # Paramètre pour changer le background
@@ -151,7 +138,8 @@ class WindowApp(QWidget):
         opacity_label = QLabel("Slices opacity:")
         self._opacity_slider.setMinimum(0)
         self._opacity_slider.setMaximum(100)
-        self._opacity_slider.setValue(50)  # par défaut à 50%
+        self._opacity_slider.setSingleStep(1)
+        self._opacity_slider.setValue(50)  # par défaut : 0.5
         self._opacity_slider.valueChanged.connect(self.change_slice_opacity)
         opacity_layout.addWidget(opacity_label)
         opacity_layout.addWidget(self._opacity_slider)
@@ -160,12 +148,12 @@ class WindowApp(QWidget):
         # paramètre pour le view rendering
         mode_layout = QHBoxLayout()
         mode_label = QLabel("Rendering Mode:")
-        self.mode_combo = QComboBox()
-        self.mode_combo.addItem("Slices")
-        self.mode_combo.addItem("Volume 3D")
-        self.mode_combo.currentTextChanged.connect(self.rendering_mode_selection)
+        self.mode_button = QComboBox()
+        self.mode_button.addItem("Slices")
+        self.mode_button.addItem("Volume 3D")
+        self.mode_button.currentTextChanged.connect(self.on_mode_changed)
         mode_layout.addWidget(mode_label)
-        mode_layout.addWidget(self.mode_combo)
+        mode_layout.addWidget(self.mode_button)
         self._left_control_panel.addLayout(mode_layout)
 
         # contrôle pour le zoom
@@ -190,55 +178,6 @@ class WindowApp(QWidget):
 
         self._visualization_tab.setLayout(viz_layout)
 
-    def _build_converter_tab(self):
-        self.converter_layout = QVBoxLayout()
-
-        self.load_button = QPushButton("Load from computer")
-        self.load_button.clicked.connect(self.conversion_load_button_behaviour)
-        self.converter_layout.addWidget(self.load_button)
-
-        self.drop_label = QLabel("Drag and drop a .trk file here")
-        self.drop_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        self.drop_label.setStyleSheet("QLabel { border: 2px dashed #aaa; }")
-        self.drop_label.setAcceptDrops(True)
-        self.drop_label.setFixedHeight(100)
-        self.converter_layout.addWidget(self.drop_label)
-
-        self._converter_tab.setLayout(self.converter_layout)
-
-        self.drop_label.installEventFilter(self)
-
-    def rendering_mode_selection(self, mode):
-        self._viewer.render_mode(mode)
-
-    def change_slice_opacity(self, value):
-        self._current_session.opacity = value / 100.0 # valeur flottante entre 0 et 1
-        if self._viewer.working_nifti_obj:
-            for orient in ["Axial", "Coronal", "Sagittal"]:
-                current_value = self.slice_controls[orient][0].value()
-                self._viewer.update_slices(orient.lower(), current_value, opacity=self._current_session.opacity)
-
-    def reset_cam_zoom(self):
-        self.zoom_slider.setValue(100)
-        self._viewer.reset_view()
-
-    def take_screenshot(self):
-        fileName, _ = QFileDialog.getSaveFileName(self, "Save screenshot", "", "PNG Files (*.png)")
-        if fileName:
-            try:
-                self._viewer.screenshot(filename=fileName)
-                QMessageBox.information(self, "Screenshot", f"Screenshot saved to: {fileName}")
-            except Exception as e:
-                QMessageBox.information(self, "Screenshot", f"Error saving screenshot: {e}")
-
-    def view_tracts_statistics(self):
-        if not self._current_session or not self._current_session.tracts:
-            QMessageBox.information(self, "Tractography Statistics", "No tractography data available")
-            return
-
-        report_lines = self._current_session.tract_statistics()
-        QMessageBox.information(self, "Tractography Statistics", "\n\n".join(report_lines))
-
     def _on_load_volume(self):
         file_path, _ = QFileDialog.getOpenFileName(self, "Add a volume/anatomical file", "", "(*.nii *.nii.gz)")
         if file_path:
@@ -258,7 +197,8 @@ class WindowApp(QWidget):
             self._create_session(nifti_object, filename)
             self._viewer.set_working_nifti_obj(nifti_object)
             self._set_sliders_values(nifti_object.get_dimensions())
-            self.rendering_mode_selection(self.mode_combo.currentText())
+            self._viewer.render_mode(self.mode_button.currentText())
+            self._set_slice_controls_enabled(self.mode_button.currentText().lower() == "slices")
 
             for tp in tracto_path_list:
                 to = load_tractography(tp, nifti_ref=nifti_object)
@@ -267,22 +207,34 @@ class WindowApp(QWidget):
                 self.add_tracto_checkbox(tp)
             self._current_session.apply()
 
-
     def _set_sliders_values(self, dimensions):
         if len(dimensions) > 3:
             dimensions = dimensions[:3]
 
         self._set_sliders_maximum(dimensions)
         x, y, z = dimensions
-        self.slice_controls["Axial"][0].setValue((z - 1) // 2)
-        self.slice_controls["Coronal"][0].setValue((y - 1) // 2)
-        self.slice_controls["Sagittal"][0].setValue((x - 1) // 2)
+        for ori, control in self.slice_controls.items():
+            if ori == "Axial": control.set_value((z - 1) // 2)
+            elif ori == "Coronal": control.set_value((y - 1) // 2)
+            elif ori == "Sagittal": control.set_value((x - 1) // 2)
 
-    def _set_sliders_maximum(self, dimensions):
-        x, y, z = dimensions
-        self.slice_controls["Axial"][0].setMaximum(z - 1)
-        self.slice_controls["Coronal"][0].setMaximum(y - 1)
-        self.slice_controls["Sagittal"][0].setMaximum(x - 1)
+    def change_slice_opacity(self, value):
+        self._current_session.opacity = value / 100.0 # valeur flottante entre 0 et 1
+        if self._viewer.working_nifti_obj:
+            self._viewer.update_slice_opacity(self._current_session.opacity)
+
+    def reset_cam_zoom(self):
+        self.zoom_slider.setValue(100)
+        self._viewer.reset_view()
+
+    def take_screenshot(self):
+        fileName, _ = QFileDialog.getSaveFileName(self, "Save screenshot", "", "PNG Files (*.png)")
+        if fileName:
+            try:
+                self._viewer.screenshot(filename=fileName)
+                QMessageBox.information(self, "Screenshot", f"Screenshot saved to: {fileName}")
+            except Exception as e:
+                QMessageBox.information(self, "Screenshot", f"Error saving screenshot: {e}")
 
     def _on_load_streamlines(self):
         file_path, _ = QFileDialog.getOpenFileName(self, "Add a tractography file", "", "(*.trk *.tck)")
@@ -296,14 +248,23 @@ class WindowApp(QWidget):
             else:
                 self._create_session(None, os.path.basename(file_path))
                 self._current_session.add_tract(tracto_obj)
+                self._set_slice_controls_enabled(False)
+                self.mode_button.setEnabled(False)
 
             self._viewer.show_tractogram(tracto_obj)
             self.add_tracto_checkbox(file_path)
 
-    def _create_session(self, anat_obj, filename):
-        nifti_obj = anat_obj
-        display_name = f"session {len(self._sessions) + 1}: " + filename
-        session = Session(display_name, nifti_obj, self._viewer)
+    def view_tracts_statistics(self):
+        if not self._current_session or not self._current_session.tracts:
+            QMessageBox.information(self, "Tractography Statistics", "No tractography data available")
+            return
+
+        report_lines = self._current_session.tract_statistics()
+        QMessageBox.information(self, "Tractography Statistics", "\n\n".join(report_lines))
+
+    def _create_session(self, volume_obj, filename):
+        display_name = f"Session {len(self._sessions) + 1}: " + filename
+        session = Session(display_name, volume_obj, self._viewer)
         self._sessions.append(session)
         self.session_selector.addItem(display_name)
         self.session_selector.setCurrentText(display_name)
@@ -312,23 +273,25 @@ class WindowApp(QWidget):
         self.rename_button.setVisible(True)
 
     def switch_session(self, selected_label):
+        # on save l'état de la current sess
+        self._save_current_session_state()
+
         session = next((f for f in self._sessions if f.display_name == selected_label), None)
         if not session: return
-
-        self._save_current_session_state()
         self._current_session = session
-
+        # màj viewer avec session
         session.apply()
 
-        # màj UI avec le nouveau session
+        # màj UI avec session
         if session.volume_obj is not None:
-            dims = session.volume_obj.get_dimensions()
-            self._set_sliders_maximum(dims)
-            for ori, (slider, _) in self.slice_controls.items():
-                slider.setValue(session.slice_positions[ori.lower()])
+            self._set_sliders_maximum(session.volume_obj.get_dimensions())
+            for ori, control in self.slice_controls.items():
+                control.set_value(session.slice_positions[ori.lower()])
             self._opacity_slider.setValue(int(session.opacity * 100))
             self.zoom_slider.setValue(int(session.zoom_factor * 100))
             self._viewer.change_background(session.background_color)
+            self.mode_button.setCurrentText(session.rendering_mode)
+            self._set_slice_controls_enabled(session.rendering_mode.lower() == "slices")
 
         if self.tracto_checkboxes:
             for file_path, checkbox in self.tracto_checkboxes.items():
@@ -340,11 +303,23 @@ class WindowApp(QWidget):
 
     def _save_current_session_state(self):
         if self._current_session and self._current_session.volume_obj:
-            for ori, (slider, _) in self.slice_controls.items():
-                self._current_session.slice_positions[ori.lower()] = slider.value()
+            for ori, control in self.slice_controls.items():
+                self._current_session.slice_positions[ori.lower()] = control.get_value()
             self._current_session.opacity = self._opacity_slider.value() / 100.0
             self._current_session.zoom_factor = self.zoom_slider.value() / 100.0
             self._current_session.background_color = self._viewer.background_color.name
+            self._current_session.rendering_mode = self.mode_button.currentText()
+
+    def on_mode_changed(self, mode):
+        self._viewer.render_mode(mode)
+        self._set_slice_controls_enabled(mode.lower() == "slices")
+
+    def _set_sliders_maximum(self, dimensions):
+        x, y, z = dimensions
+        for ori, control in self.slice_controls.items():
+            if ori == "Axial": control.set_max(z - 1)
+            elif ori == "Coronal": control.set_max(y - 1)
+            elif ori == "Sagittal": control.set_max(x - 1)
 
     def rename_current_session(self):
         self.rename_lineedit.setVisible(True)
@@ -381,20 +356,38 @@ class WindowApp(QWidget):
         checkbox.associated_session = self.session_selector.currentText()
         self.tracto_checkboxes[file_path] = checkbox
 
-    def change_slices_position(self, value, orientation):
-        self.slice_controls[orientation][1].setText(str(value))
+    def _set_slice_controls_enabled(self, enabled: bool):
+        for control in self.slice_controls.values():
+            control.slider.setEnabled(enabled)
+            control.line_edit.setEnabled(enabled)
+        self._opacity_slider.setEnabled(enabled)
 
+    def change_slices_position(self, value, orientation):
         if self._viewer.working_nifti_obj:
             self._viewer.schedule_slice_update(orientation.lower(), value, self._current_session.opacity)
 
-    def manual_slice_update(self, orientation, input_box):
-        try:
-            value = int(input_box.text())
-            if 0 <= value < self.slice_controls[orientation][0].maximum():
-                self.slice_controls[orientation][0].setValue(value)
-                self._viewer.update_slices(orientation.lower(), value, opacity=self._current_session.opacity)
-        except ValueError:
-            pass
+    def _init_converter_tab(self):
+        self._converter_tab = QWidget()
+        self._tabs.addTab(self._converter_tab, "Converter")
+        self._build_converter_tab()
+
+    def _build_converter_tab(self):
+        converter_layout = QVBoxLayout()
+
+        load_button = QPushButton("Load from computer")
+        load_button.clicked.connect(self.conversion_load_button_behaviour)
+        converter_layout.addWidget(load_button)
+
+        self.drop_label = QLabel("Drag and drop a .trk file here")
+        self.drop_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self.drop_label.setStyleSheet("QLabel { border: 2px dashed #aaa; }")
+        self.drop_label.setAcceptDrops(True)
+        self.drop_label.setFixedHeight(100)
+        converter_layout.addWidget(self.drop_label)
+
+        self._converter_tab.setLayout(converter_layout)
+
+        self.drop_label.installEventFilter(self)
 
     def eventFilter(self, source, event):
         if event.type() == event.Type.DragEnter and source is self.drop_label:
