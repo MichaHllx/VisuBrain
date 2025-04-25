@@ -1,6 +1,6 @@
 # visubrain/gui/window.py
-import os
-import tempfile
+
+from pathlib import Path
 
 from PyQt6.QtWidgets import (
     QWidget, QVBoxLayout, QTabWidget, QFileDialog, QPushButton, QLabel,
@@ -193,7 +193,7 @@ class WindowApp(QWidget):
                 self._sessions.remove(self._current_session)
                 self.session_selector.removeItem(index)
 
-            filename = os.path.basename(file_path)
+            filename = Path(file_path).name
             self._create_session(nifti_object, filename)
             self._viewer.set_working_nifti_obj(nifti_object)
             self._set_sliders_values(nifti_object.get_dimensions())
@@ -246,7 +246,7 @@ class WindowApp(QWidget):
             if self._current_session:
                 self._current_session.add_tract(tracto_obj)
             else:
-                self._create_session(None, os.path.basename(file_path))
+                self._create_session(None, Path(file_path).name)
                 self._current_session.add_tract(tracto_obj)
                 self._set_slice_controls_enabled(False)
                 self.mode_button.setEnabled(False)
@@ -348,7 +348,7 @@ class WindowApp(QWidget):
         self.rename_button.setText("New session name")
 
     def add_tracto_checkbox(self, file_path):
-        checkbox = QCheckBox(f"Tractography: {os.path.basename(file_path)}")
+        checkbox = QCheckBox(f"Tractography: {Path(file_path).name}")
         checkbox.setChecked(True)
         checkbox.stateChanged.connect(lambda state, f=file_path: self._viewer.set_file_visibility(f, state==2))
         self._left_control_panel.addWidget(checkbox)
@@ -374,56 +374,79 @@ class WindowApp(QWidget):
     def _build_converter_tab(self):
         converter_layout = QVBoxLayout()
 
-        load_button = QPushButton("Load from computer")
-        load_button.clicked.connect(self.conversion_load_button_behaviour)
-        converter_layout.addWidget(load_button)
+        # Entry file
+        h_in = QHBoxLayout()
+        self.input_edit = QLineEdit()
+        btn_in = QPushButton("Browse…")
+        btn_in.clicked.connect(self._browse_input)
+        h_in.addWidget(QLabel("Source file"))
+        h_in.addWidget(self.input_edit)
+        h_in.addWidget(btn_in)
+        converter_layout.addLayout(h_in)
 
-        self.drop_label = QLabel("Drag and drop a .trk file here")
-        self.drop_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        self.drop_label.setStyleSheet("QLabel { border: 2px dashed #aaa; }")
-        self.drop_label.setAcceptDrops(True)
-        self.drop_label.setFixedHeight(100)
-        converter_layout.addWidget(self.drop_label)
+        # anat ref (juste pour .tck)
+        h_ref = QHBoxLayout()
+        self.ref_edit = QLineEdit()
+        btn_ref = QPushButton("Anatomical reference")
+        btn_ref.clicked.connect(self._browse_reference)
+        h_ref.addWidget(QLabel("Anatomical reference (for *.tck files)"))
+        h_ref.addWidget(self.ref_edit)
+        h_ref.addWidget(btn_ref)
+        converter_layout.addLayout(h_ref)
+
+        #output format selection
+        h_format = QHBoxLayout()
+        self.out_combo = QComboBox()
+        h_format.addWidget(QLabel("Target format"))
+        h_format.addWidget(self.out_combo)
+        converter_layout.addLayout(h_format)
+
+        # output path
+        h_out = QHBoxLayout()
+        self.output_edit = QLineEdit()
+        btn_out = QPushButton("Save as…")
+        btn_out.clicked.connect(self._browse_output)
+        h_out.addWidget(QLabel("Target file"))
+        h_out.addWidget(self.output_edit)
+        h_out.addWidget(btn_out)
+        converter_layout.addLayout(h_out)
+
+        # convert button
+        convert_btn = QPushButton("Convert")
+        convert_btn.clicked.connect(self._on_convert)
+        converter_layout.addWidget(convert_btn)
 
         self._converter_tab.setLayout(converter_layout)
 
-        self.drop_label.installEventFilter(self)
+    def _browse_input(self):
+        path, _ = QFileDialog.getOpenFileName(self, "Open file", "", "All Files (*)")
+        if not path: return
+        self.input_edit.setText(path)
+        ext = Path(path).suffix.lower().lstrip('.')
+        combos = [o for (i, o) in Converter._CONVERTERS if i == ext]
+        self.out_combo.clear()
+        self.out_combo.addItems(combos)
 
-    def eventFilter(self, source, event):
-        if event.type() == event.Type.DragEnter and source is self.drop_label:
-            if event.mimeData().hasUrls():
-                event.acceptProposedAction()
-                return True
-        elif event.type() == event.Type.Drop and source is self.drop_label:
-            if event.mimeData().hasUrls():
-                file_path = event.mimeData().urls()[0].toLocalFile()
-                if file_path.endswith(".trk"):
-                    self.handle_dropped_file(file_path)
-                return True
-        return super().eventFilter(source, event)
+    def _browse_reference(self):
+        path, _ = QFileDialog.getOpenFileName(self, "Choose an anatomical reference", "", "(*.nii *.nii.gz)")
+        if path:
+            self.ref_edit.setText(path)
 
-    def conversion_load_button_behaviour(self):
-        file_path, _ = QFileDialog.getOpenFileName(self, "Load from computer", "", "(*.trk)")
-        if file_path:
-            self.handle_dropped_file(file_path)
+    def _browse_output(self):
+        path, _ = QFileDialog.getSaveFileName(self, "Save as", "", f"*.{self.out_combo.currentText()}")
+        if path:
+            self.output_edit.setText(path)
 
-    def handle_dropped_file(self, file_path):
-        file_name = os.path.basename(file_path)
-        self.drop_label.setText(f"File uploaded: {file_name}")
-
-        temp_dir = tempfile.gettempdir()
-        converted_file_path = os.path.join(temp_dir, f'{file_name[:-4]}_converted.fbr')
-        trk2fbr_conversion = Converter(file_path, converted_file_path, "trk_to_fbr")
-        trk2fbr_conversion.convert()
-
-        download_button = QPushButton(f"Download {file_name[:-4]}_converted.fbr")
-        download_button.clicked.connect(lambda: self.download_file(converted_file_path))
-        self._converter_tab.layout().addWidget(download_button)
-
-    def download_file(self, file_path):
-        save_path, _ = QFileDialog.getSaveFileName(self, "Save file", file_path)
-        if save_path:
-            with open(file_path, 'rb') as f:
-                data = f.read()
-            with open(save_path, 'wb') as f:
-                f.write(data)
+    def _on_convert(self):
+        inp = self.input_edit.text().strip()
+        out = self.output_edit.text().strip()
+        ref = self.ref_edit.text().strip() or None
+        if not inp or not out:
+            QMessageBox.warning(self, "Error", "Please specify the two routes.")
+            return
+        try:
+            conv = Converter(inp, out, anatomical_ref=ref)
+            conv.convert()
+            QMessageBox.information(self, "Success", "Conversion successful.")
+        except Exception as e:
+            QMessageBox.critical(self, "Failure", f"Conversion failed: {str(e)}")
