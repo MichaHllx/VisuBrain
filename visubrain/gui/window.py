@@ -4,7 +4,8 @@ from pathlib import Path
 
 from PyQt6.QtWidgets import (
     QWidget, QVBoxLayout, QTabWidget, QFileDialog, QPushButton, QLabel,
-    QHBoxLayout, QSlider, QLineEdit, QComboBox, QCheckBox, QMenuBar, QMenu, QMessageBox
+    QHBoxLayout, QSlider, QLineEdit, QComboBox, QCheckBox, QMenuBar, QMenu, QMessageBox, QDialog, QTextEdit,
+    QDialogButtonBox
 )
 from PyQt6.QtCore import Qt
 from PyQt6.QtGui import QAction
@@ -13,7 +14,9 @@ from visubrain.gui.viewer import PyVistaViewer
 from visubrain.gui.session import Session
 from visubrain.gui.slice_controller import SliceControl
 from visubrain.core.converter import Converter
-from visubrain.io.loader import load_nifti, load_tractography
+from visubrain.io.nifti import NiftiFile
+from visubrain.io.tractography import Tractography
+
 
 class WindowApp(QWidget):
 
@@ -64,6 +67,15 @@ class WindowApp(QWidget):
         view_stats_tract_action = QAction("Tracts statistics", self)
         view_stats_tract_action.triggered.connect(self.view_tracts_statistics)
         stat_menu.addAction(view_stats_tract_action)
+
+        # Menu "About"
+        about_menu = QMenu("About", self)
+        menu_bar.addMenu(about_menu)
+
+            # action pour voir la license
+        view_license_action = QAction("View License", self)
+        view_license_action.triggered.connect(self._on_view_license)
+        about_menu.addAction(view_license_action)
 
     def _init_tabs(self):
         self._tabs = QTabWidget()
@@ -178,10 +190,26 @@ class WindowApp(QWidget):
 
         self._visualization_tab.setLayout(viz_layout)
 
+    def _on_view_license(self):
+        license_text = ""
+        dialog = QDialog(self)
+        dialog.setWindowTitle("License")
+        dialog.resize(600, 400)
+        layout = QVBoxLayout()
+        text_edit = QTextEdit()
+        text_edit.setPlainText(license_text)
+        text_edit.setReadOnly(True)
+        layout.addWidget(text_edit)
+        button_box = QDialogButtonBox(QDialogButtonBox.StandardButton.Ok)
+        button_box.accepted.connect(dialog.accept)
+        layout.addWidget(button_box)
+        dialog.setLayout(layout)
+        dialog.exec()
+
     def _on_load_volume(self):
         file_path, _ = QFileDialog.getOpenFileName(self, "Add a volume/anatomical file", "", "(*.nii *.nii.gz)")
         if file_path:
-            nifti_object = load_nifti(file_path)
+            nifti_object = NiftiFile(file_path)
 
             if not nifti_object: return
 
@@ -201,7 +229,7 @@ class WindowApp(QWidget):
             self._set_slice_controls_enabled(self.mode_button.currentText().lower() == "slices")
 
             for tp in tracto_path_list:
-                to = load_tractography(tp, nifti_ref=nifti_object)
+                to = Tractography(tp, reference_nifti=nifti_object)
                 self._current_session.add_tract(to)
                 self._viewer.show_tractogram(to)
                 self.add_tracto_checkbox(tp)
@@ -239,7 +267,10 @@ class WindowApp(QWidget):
     def _on_load_streamlines(self):
         file_path, _ = QFileDialog.getOpenFileName(self, "Add a tractography file", "", "(*.trk *.tck)")
         if file_path:
-            tracto_obj = load_tractography(file_path, nifti_ref=self._viewer.working_nifti_obj)
+            try: tracto_obj = Tractography(file_path, reference_nifti=self._viewer.working_nifti_obj)
+            except Exception as e:
+                QMessageBox.information(self, "Error loading tractography file", f"Error loading tractography file: {e}")
+                return
 
             if not tracto_obj: return
 
@@ -313,6 +344,8 @@ class WindowApp(QWidget):
     def on_mode_changed(self, mode):
         self._viewer.render_mode(mode)
         self._set_slice_controls_enabled(mode.lower() == "slices")
+        if self._current_session.volume_obj:
+            self._set_sliders_values(self._current_session.volume_obj.get_dimensions())
 
     def _set_sliders_maximum(self, dimensions):
         x, y, z = dimensions
@@ -389,7 +422,7 @@ class WindowApp(QWidget):
         self.ref_edit = QLineEdit()
         btn_ref = QPushButton("Anatomical reference")
         btn_ref.clicked.connect(self._browse_reference)
-        h_ref.addWidget(QLabel("Anatomical reference (for *.tck files)"))
+        h_ref.addWidget(QLabel("Anatomical reference (for *.tck/*.voi files)"))
         h_ref.addWidget(self.ref_edit)
         h_ref.addWidget(btn_ref)
         converter_layout.addLayout(h_ref)
@@ -422,13 +455,13 @@ class WindowApp(QWidget):
         path, _ = QFileDialog.getOpenFileName(self, "Open file", "", "All Files (*)")
         if not path: return
         self.input_edit.setText(path)
-        ext = Path(path).suffix.lower().lstrip('.')
+        ext = ''.join(Path(path).suffixes).lower().lstrip('.')
         combos = [o for (i, o) in Converter._CONVERTERS if i == ext]
         self.out_combo.clear()
         self.out_combo.addItems(combos)
 
     def _browse_reference(self):
-        path, _ = QFileDialog.getOpenFileName(self, "Choose an anatomical reference", "", "(*.nii *.nii.gz)")
+        path, _ = QFileDialog.getOpenFileName(self, "Choose an anatomical reference", "", "(*.nii *.nii.gz, *.vmr)")
         if path:
             self.ref_edit.setText(path)
 

@@ -42,12 +42,14 @@ class PyVistaViewer(QtInteractor):
 
     def schedule_slice_update(self, axis, value, opacity):
         self.pending_update = (axis, value, opacity)
-        self.slice_update_timer.start(50)  # en ms
+        if self.slice_update_timer.isActive():
+            self.slice_update_timer.stop()
+        self.slice_update_timer.start(5)
 
     def perform_slice_update(self):
         if self.pending_update:
             axis, value, opacity = self.pending_update
-            self.update_slices(axis, value, opacity)
+            self.update_slice_position(axis, value, opacity)
             self.pending_update = None
 
     def render_mode(self, mode: str, opacity=0.5) -> bool:
@@ -158,7 +160,7 @@ class PyVistaViewer(QtInteractor):
                     self.volume_sliced_actor[key].SetVisibility(visible)
         self.render()
 
-    def update_slices(self, axis, value, opacity=0.5):
+    def update_slice_position(self, axis, value, opacity=0.5):
         if self.working_nifti_obj is None:
             return
 
