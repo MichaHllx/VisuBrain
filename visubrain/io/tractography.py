@@ -1,34 +1,34 @@
 # visubrain/io/tractography.py
 import numpy as np
 
-from PyQt6.QtWidgets import QMessageBox
-from dipy.io.streamline import load_tractogram
+from dipy.io.streamline import load_tractogram, Origin
 from dipy.tracking.streamline import transform_streamlines
 
 
-class TractographyFile:
+class Tractography:
 
-    def __init__(self, file_path: str, reference_nifti=None):
+    def __init__(self, file_path: str, session_id, reference_nifti=None):
         self.file_path = file_path
         self.reference_nifti = reference_nifti
         self.streamlines, self.raw_data = self._load_streamlines()
+        self.session_id = session_id
 
     def _load_streamlines(self):
-        if self.file_path.endswith(".tck"):
-            if not self.reference_nifti:
-                QMessageBox.critical(None, "Error", "A tck file needs an anatomical reference image beforehand.")
-                return
-            tracto = load_tractogram(self.file_path, self.reference_nifti.file_path)
-        else:
-            tracto = load_tractogram(self.file_path, 'same')
+        try:
+            if self.file_path.endswith(".tck"):
+                if not self.reference_nifti: raise ValueError("A tck file needs an anatomical reference image beforehand.")
+                sf_tracto = load_tractogram(filename=self.file_path, reference=self.reference_nifti.file_path)
+            else:
+                sf_tracto = load_tractogram(filename=self.file_path, reference='same', to_origin=Origin.TRACKVIS)
+        except:
+            raise ValueError("Error while loading streamlines")
 
         if self.reference_nifti is not None:
-            # passage de l'espace image à l'espace RASmm du fichier anat
             affine = self.reference_nifti.affine
-            stream_reg = transform_streamlines(tracto.streamlines, np.linalg.inv(affine))
-            return stream_reg, tracto
+            stream_reg = transform_streamlines(sf_tracto.streamlines, np.linalg.inv(affine)) # world streamlines coord -> voxel nifti space
+            return stream_reg, sf_tracto
 
-        return tracto.streamlines, tracto
+        return sf_tracto.streamlines, sf_tracto
 
     def get_streamlines(self):
         return self.streamlines

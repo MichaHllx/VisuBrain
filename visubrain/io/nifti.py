@@ -6,10 +6,11 @@ class NiftiFile:
 
     def __init__(self, file_path: str):
         self.file_path = file_path
-        self.image = nib.load(file_path)
+        self.image = nib.as_closest_canonical(nib.load(file_path))
         self.data = self.image.get_fdata()
         self.affine = self.image.affine
         self.shape = self.data.shape
+        self.orient = nib.aff2axcodes(self.affine)
 
     def get_affine(self):
         return self.affine

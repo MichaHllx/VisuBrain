@@ -9,10 +9,10 @@ class BinaryFbrFile:
         self._magic = None
         self._file_version = None
         self._coords_type = None
-        self._fibers_origin = None
+        self.fibers_origin = None
         self._num_groups = None
-        self._num_fibers = None
-        self._groups = []
+        self.num_fibers = None
+        self.groups = []
         if fbr_file is not None:
             self._read()
 
@@ -26,7 +26,7 @@ class BinaryFbrFile:
             # Lire les champs header
             self._file_version = struct.unpack('<I', f.read(4))[0]
             self._coords_type = struct.unpack('<I', f.read(4))[0]
-            self._fibers_origin = struct.unpack('<3f', f.read(12))
+            self.fibers_origin = struct.unpack('<3f', f.read(12))
             self._num_groups = struct.unpack('<I', f.read(4))[0]
 
             # Lire les groupes
@@ -47,7 +47,7 @@ class BinaryFbrFile:
                 group['thickness'] = struct.unpack('<f', f.read(4))[0]
                 group['color'] = struct.unpack('<3B', f.read(3))
                 num_fibers = struct.unpack('<I', f.read(4))[0]
-                self._num_fibers = num_fibers
+                self.num_fibers = num_fibers
 
                 fibers = []
                 for _ in range(num_fibers):
@@ -69,7 +69,7 @@ class BinaryFbrFile:
                     fiber['colors'] = list(zip(r_values, g_values, b_values))
                     fibers.append(fiber)
                 group['fibers'] = fibers
-                self._groups.append(group)
+                self.groups.append(group)
 
     @staticmethod
     def write_fbr(output_fbr_file_path, header, fibers):
@@ -119,7 +119,7 @@ class BinaryFbrFile:
 
     def get_fiber_coordinates(self):
         coordinates = []
-        for group in self._groups:
+        for group in self.groups:
             for fiber in group['fibers']:
                 coordinates.append(fiber['points'])
         return coordinates
@@ -127,15 +127,15 @@ class BinaryFbrFile:
     def get_header(self):
         dico =  {
             'FBRFile' : self._fbr_file,
-            'Animate' : ','.join([str(g['animate']) for g in self._groups]),
-            'Color' : ','.join([str(g['color']) for g in self._groups]),
+            'Animate' : ','.join([str(g['animate']) for g in self.groups]),
+            'Color' : ','.join([str(g['color']) for g in self.groups]),
             'CoordsType' : self._coords_type,
-            'FibersOrigin' : self._fibers_origin,
+            'FibersOrigin' : self.fibers_origin,
             'FileVersion' : self._file_version,
-            'Name' : ','.join([g['name'] for g in self._groups]),
-            'NrOfFibers' : ','.join([str(len(g['fibers'])) for g in self._groups]),
-            'NrOfGroups' : len(self._groups),
-            'Thickness' : ','.join([str(g['thickness']) for g in self._groups]),
-            'Visible' : ','.join([str(g['visible']) for g in self._groups])
+            'Name' : ','.join([g['name'] for g in self.groups]),
+            'NrOfFibers' : ','.join([str(len(g['fibers'])) for g in self.groups]),
+            'NrOfGroups' : len(self.groups),
+            'Thickness' : ','.join([str(g['thickness']) for g in self.groups]),
+            'Visible' : ','.join([str(g['visible']) for g in self.groups])
         }
         return dico.__str__()

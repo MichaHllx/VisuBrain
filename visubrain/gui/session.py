@@ -1,4 +1,6 @@
 # visubrain/gui/session.py
+from pathlib import Path
+
 import numpy as np
 
 
@@ -59,7 +61,7 @@ class Session:
             mean_len = np.mean(lengths) if lengths else 0.0
             total_len = np.sum(lengths)
             report_lines.append(
-                f"{name}\n"
+                f"{Path(name).name}\n"
                 f"  • Number of streamlines: {n_streams}\n"
                 f"  • Mean length: {mean_len:.1f}mm\n"
                 f"  • Total length: {total_len:.1f}mm\n"

@@ -1,4 +1,5 @@
 # visubrain/gui/viewer.py
+from typing import Dict
 
 import pyvista as pv
 import numpy as np
@@ -6,6 +7,7 @@ import numpy as np
 from PyQt6.QtCore import QTimer
 from PyQt6.QtWidgets import QMessageBox
 from pyvistaqt import QtInteractor
+from vtkmodules.vtkRenderingCore import vtkActor
 
 
 def _slice_actor_key(file_path: str, axis: str) -> str:
@@ -23,7 +25,8 @@ class PyVistaViewer(QtInteractor):
         self.volume_3d_actor = None
         self.working_nifti_obj = None
 
-        self.tract_actors = {}
+        self.tract_actors: Dict[tuple[int,str], vtkActor] = {}
+        self.align_streamlines = False
 
         self.slice_update_timer = QTimer()
         self.slice_update_timer.setSingleShot(True)
@@ -31,6 +34,7 @@ class PyVistaViewer(QtInteractor):
         self.pending_update = None
 
         self.current_zoom_factor = 1.0
+        self.current_mode = "slices"
 
         self.add_axes()
         self.show()
@@ -42,12 +46,14 @@ class PyVistaViewer(QtInteractor):
 
     def schedule_slice_update(self, axis, value, opacity):
         self.pending_update = (axis, value, opacity)
-        self.slice_update_timer.start(50)  # en ms
+        if self.slice_update_timer.isActive():
+            self.slice_update_timer.stop()
+        self.slice_update_timer.start(5)
 
     def perform_slice_update(self):
         if self.pending_update:
             axis, value, opacity = self.pending_update
-            self.update_slices(axis, value, opacity)
+            self.update_slice_position(axis, value, opacity)
             self.pending_update = None
 
     def render_mode(self, mode: str, opacity=0.5) -> bool:
@@ -59,15 +65,32 @@ class PyVistaViewer(QtInteractor):
             QMessageBox.critical(self, "Erreur", "Bad file dimension (only 3D)")
             return False
 
-        self.clear_previous_actors()
+        mode_lower = mode.lower()
+        self.current_mode = mode_lower
+        if mode_lower == "slices":
+            if not self.volume_sliced_actor:
+                x, y, z = shape
+                self._create_slice_actor([0, 0, 1], [0, 0, z // 2], "axial", opacity=opacity)
+                self._create_slice_actor([0, 1, 0], [0, y // 2, 0], "coronal", opacity=opacity)
+                self._create_slice_actor([1, 0, 0], [x // 2, 0, 0], "sagittal", opacity=opacity)
+            else:
+                self.update_slice_opacity(opacity)
+            for actor in self.volume_sliced_actor.values():
+                actor.SetVisibility(True)
+            if self.volume_3d_actor:
+                self.volume_3d_actor.SetVisibility(False)
+            for actor in self.tract_actors.values():
+                actor.SetVisibility(False)
 
-        if mode.lower() == "slices":
-            x, y, z = shape
-            self._create_slice_actor([0, 0, 1], [0, 0, z // 2], "axial", opacity=opacity)
-            self._create_slice_actor([0, 1, 0], [0, y // 2, 0], "coronal", opacity=opacity)
-            self._create_slice_actor([1, 0, 0], [x // 2, 0, 0], "sagittal", opacity=opacity)
-        elif mode.lower() == "volume 3d":
-            self.volume_3d_actor = self._create_volume_actor()
+        elif mode_lower == "volume 3d":
+            if self.volume_3d_actor is None:
+                self.volume_3d_actor = self._create_volume_actor()
+            self.volume_3d_actor.SetVisibility(True)
+            for actor in self.volume_sliced_actor.values():
+                actor.SetVisibility(False)
+            for actor in self.tract_actors.values():
+                actor.SetVisibility(False)
+
         else:
             QMessageBox.warning(self, "Rendering Mode", f"Unsupported mode: {mode}")
             return False
@@ -85,6 +108,18 @@ class PyVistaViewer(QtInteractor):
 
         for actor in self.tract_actors.values(): self.remove_actor(actor)
         self.tract_actors.clear()
+
+        self.render()
+
+    def hide_all_actors(self):
+        if self.volume_3d_actor:
+            self.volume_3d_actor.SetVisibility(False)
+
+        for actor in self.volume_sliced_actor.values():
+            actor.SetVisibility(False)
+
+        for actor in self.tract_actors.values():
+            actor.SetVisibility(False)
 
         self.render()
 
@@ -109,7 +144,7 @@ class PyVistaViewer(QtInteractor):
     def _create_volume_actor(self):
         return self.add_volume(
             self.pv_data,
-            opacity="sigmoid",
+            opacity=[0.0,0.045],
             cmap="gray",
             shade=True,
             show_scalar_bar=False
@@ -119,50 +154,51 @@ class PyVistaViewer(QtInteractor):
         if tracto_obj is None:
             return
 
-        points_list, colors_list, connectivity = tracto_obj.get_color_points(show_points)
+        sid = tracto_obj.session_id
+        key = (sid, tracto_obj.file_path)
+        if key not in self.tract_actors:
+            points_list, colors_list, connectivity = tracto_obj.get_color_points(show_points)
 
-        points = np.vstack(points_list)
-        colors = np.vstack(colors_list)
+            points = np.vstack(points_list)
+            colors = np.vstack(colors_list)
 
-        poly = pv.PolyData(points)
-        poly["Colors"] = colors
+            poly = pv.PolyData(points)
+            poly["Colors"] = colors
 
-        if not show_points:
-            connectivity_flat = np.hstack(connectivity)
-            poly.lines = connectivity_flat
-            point_size = 0
-            ambient = 0.3
-        else:
-            point_size = 2
-            ambient = 0
+            if not show_points:
+                connectivity_flat = np.hstack(connectivity)
+                poly.lines = connectivity_flat
+                point_size = 0
+                ambient = 0.3
+            else:
+                point_size = 2
+                ambient = 0
 
-        actor = self.add_mesh(poly,
-                              scalars="Colors",
-                              rgb=True,
-                              render_lines_as_tubes=not show_points,
-                              line_width=2,
-                              point_size=point_size,
-                              ambient=ambient)
+            actor = self.add_mesh(poly,
+                                  scalars="Colors",
+                                  rgb=True,
+                                  render_lines_as_tubes=not show_points,
+                                  line_width=2,
+                                  point_size=point_size,
+                                  ambient=ambient)
+            self.tract_actors[key] = actor
 
-        self.tract_actors[tracto_obj.file_path] = actor
+        self.tract_actors[key].SetVisibility(True)
         self.render()
         return True
 
-    def set_file_visibility(self, file_path, visible):
-        if file_path in self.tract_actors:
-            self.tract_actors[file_path].SetVisibility(visible)
-        else:
-            for axis in ["axial", "coronal", "sagittal"]:
-                key = _slice_actor_key(file_path, axis)
-                if key in self.volume_sliced_actor:
-                    self.volume_sliced_actor[key].SetVisibility(visible)
-        self.render()
+    def set_file_visibility(self, file_path, visible, session_id):
+        key = (session_id, file_path)
+        actor = self.tract_actors.get(key)
+        if actor:
+            actor.SetVisibility(visible)
+            self.render()
 
-    def update_slices(self, axis, value, opacity=0.5):
+    def update_slice_position(self, axis, value, opacity=0.5):
         if self.working_nifti_obj is None:
             return
 
-        if self.volume_3d_actor is not None:
+        if self.current_mode != "slices":
             return
 
         if axis == "axial":
