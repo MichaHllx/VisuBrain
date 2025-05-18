@@ -17,11 +17,11 @@ This project uses the following libraries:
 Please consult the respective licenses for more information.
 
 ## Notes
-🚧 Work in Progress
+🚧 **Work in Progress**  
 This tool is constantly being improved and updated.
 
-📚 Documentation Coming Soon
+📚 **Documentation Coming Soon**  
 Method documentation will be added shortly.
 
-💬 Feedback Welcome
+💬 **Feedback Welcome**  
 Feel free to share any comments, whether about bugs, features, or anything else. You can contact me at: michael.halleux@student.uclouvain.be
