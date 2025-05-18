@@ -191,7 +191,12 @@ class WindowApp(QWidget):
         self._visualization_tab.setLayout(viz_layout)
 
     def _on_view_license(self):
-        license_text = ""
+        try:
+            license_path = Path(__file__).parent.parent.parent / "LICENSE.txt"
+            with open(license_path, 'r') as file:
+                license_text = file.read()
+        except Exception as e:
+            license_text = f"Error reading license file: {e}"
         dialog = QDialog(self)
         dialog.setWindowTitle("License")
         dialog.resize(600, 400)
@@ -213,6 +218,10 @@ class WindowApp(QWidget):
 
             if not nifti_object: return
 
+            if len(nifti_object.get_dimensions()) != 3:
+                QMessageBox.critical(self, "Erreur", "Bad file dimension (only 3D)")
+                return
+
             tracto_path_list = []
             if self._current_session and self._current_session.volume_obj is None:
                 index = self.session_selector.currentIndex()
@@ -221,6 +230,7 @@ class WindowApp(QWidget):
                 self._sessions.remove(self._current_session)
                 self.session_selector.removeItem(index)
 
+            self._viewer.clear_previous_actors()
             filename = Path(file_path).name
             self._create_session(nifti_object, filename)
             self._viewer.set_working_nifti_obj(nifti_object)
@@ -229,7 +239,7 @@ class WindowApp(QWidget):
             self._set_slice_controls_enabled(self.mode_button.currentText().lower() == "slices")
 
             for tp in tracto_path_list:
-                to = Tractography(tp, reference_nifti=nifti_object)
+                to = Tractography(tp, self._current_session.get_uid(), reference_nifti=nifti_object)
                 self._current_session.add_tract(to)
                 self._viewer.show_tractogram(to)
                 self.add_tracto_checkbox(tp)
@@ -267,9 +277,18 @@ class WindowApp(QWidget):
     def _on_load_streamlines(self):
         file_path, _ = QFileDialog.getOpenFileName(self, "Add a tractography file", "", "(*.trk *.tck)")
         if file_path:
-            try: tracto_obj = Tractography(file_path, reference_nifti=self._viewer.working_nifti_obj)
+
+            key = (self._current_session.get_uid(), file_path)
+            if key in self._viewer.tract_actors:
+                QMessageBox.information(self,
+                                        "Tracto déjà chargé",
+                                        f"Le fichier « {Path(file_path).name} » est déjà chargé dans cette session.")
+                return
+
+            try:
+                tracto_obj = Tractography(file_path, self._current_session.get_uid(), reference_nifti=self._viewer.working_nifti_obj)
             except Exception as e:
-                QMessageBox.information(self, "Error loading tractography file", f"Error loading tractography file: {e}")
+                QMessageBox.information(self, "Error loading tractography file", f"{e}")
                 return
 
             if not tracto_obj: return
@@ -306,6 +325,7 @@ class WindowApp(QWidget):
     def switch_session(self, selected_label):
         # on save l'état de la current sess
         self._save_current_session_state()
+        self._viewer.clear_previous_actors()
 
         session = next((f for f in self._sessions if f.display_name == selected_label), None)
         if not session: return
@@ -325,12 +345,10 @@ class WindowApp(QWidget):
             self._set_slice_controls_enabled(session.rendering_mode.lower() == "slices")
 
         if self.tracto_checkboxes:
-            for file_path, checkbox in self.tracto_checkboxes.items():
+            for (sid, file_path), checkbox in self.tracto_checkboxes.items():
+                visible = (checkbox.associated_session == selected_label) and checkbox.isChecked()
+                self._viewer.set_file_visibility(file_path, visible, session_id=sid)
                 checkbox.setVisible(checkbox.associated_session == selected_label)
-                if checkbox.associated_session == selected_label:
-                    self._viewer.set_file_visibility(file_path, checkbox.isChecked())
-                else:
-                    self._viewer.set_file_visibility(file_path, False)
 
     def _save_current_session_state(self):
         if self._current_session and self._current_session.volume_obj:
@@ -381,13 +399,18 @@ class WindowApp(QWidget):
         self.rename_button.setText("New session name")
 
     def add_tracto_checkbox(self, file_path):
+        sid = self._current_session.get_uid()
         checkbox = QCheckBox(f"Tractography: {Path(file_path).name}")
         checkbox.setChecked(True)
-        checkbox.stateChanged.connect(lambda state, f=file_path: self._viewer.set_file_visibility(f, state==2))
-        self._left_control_panel.addWidget(checkbox)
-
+        checkbox.stateChanged.connect(
+            lambda state, f=file_path, s=sid:
+            self._viewer.set_file_visibility(f, state == 2, session_id=s)
+        )
         checkbox.associated_session = self.session_selector.currentText()
-        self.tracto_checkboxes[file_path] = checkbox
+        checkbox.associated_session_id = sid
+        # on stocke avec clé (session_id, path)
+        self.tracto_checkboxes[(sid, file_path)] = checkbox
+        self._left_control_panel.addWidget(checkbox)
 
     def _set_slice_controls_enabled(self, enabled: bool):
         for control in self.slice_controls.values():
@@ -417,12 +440,12 @@ class WindowApp(QWidget):
         h_in.addWidget(btn_in)
         converter_layout.addLayout(h_in)
 
-        # anat ref (juste pour .tck)
+        # anat ref
         h_ref = QHBoxLayout()
         self.ref_edit = QLineEdit()
         btn_ref = QPushButton("Anatomical reference")
         btn_ref.clicked.connect(self._browse_reference)
-        h_ref.addWidget(QLabel("Anatomical reference (for *.tck/*.voi files)"))
+        h_ref.addWidget(QLabel("Anatomical reference (for *.tck/*.fbr files)"))
         h_ref.addWidget(self.ref_edit)
         h_ref.addWidget(btn_ref)
         converter_layout.addLayout(h_ref)
@@ -461,7 +484,7 @@ class WindowApp(QWidget):
         self.out_combo.addItems(combos)
 
     def _browse_reference(self):
-        path, _ = QFileDialog.getOpenFileName(self, "Choose an anatomical reference", "", "(*.nii *.nii.gz, *.vmr)")
+        path, _ = QFileDialog.getOpenFileName(self, "Choose an anatomical reference", "", "(*.nii *.nii.gz)")
         if path:
             self.ref_edit.setText(path)
 
