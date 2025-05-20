@@ -1,6 +1,7 @@
 # VisuBrain
 TFE repository 2025.
 Tool for visualising and converting brain imaging data as part of my university studies at UCLouvain.
+**This software is not approved for clinical use. Use at your own risk.**
 
 ## Libraries used
 
