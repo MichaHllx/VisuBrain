@@ -41,7 +41,6 @@ class VMRFile:
         """
         nii = nib.load(nifti_path)
         affine = nii.affine
-        print(affine)
         nii_data = np.nan_to_num(nii.get_fdata(), nan=0.)
 
         rowDirX = affine[0][0]
