@@ -1,4 +1,4 @@
-# visubrain/gui/slice_controller.py
+# visubrain/utils/slice_controller.py
 
 from PyQt6.QtWidgets import QSlider, QLineEdit
 

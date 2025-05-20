@@ -11,8 +11,8 @@ from PyQt6.QtCore import Qt
 from PyQt6.QtGui import QAction
 
 from visubrain.gui.viewer import PyVistaViewer
-from visubrain.gui.session import Session
-from visubrain.gui.slice_controller import SliceControl
+from visubrain.utils.session import Session
+from visubrain.utils.slice_controller import SliceControl
 from visubrain.core.converter import Converter
 from visubrain.io.nifti import NiftiFile
 from visubrain.io.tractography import Tractography
@@ -214,36 +214,40 @@ class WindowApp(QWidget):
     def _on_load_volume(self):
         file_path, _ = QFileDialog.getOpenFileName(self, "Add a volume/anatomical file", "", "(*.nii *.nii.gz)")
         if file_path:
-            nifti_object = NiftiFile(file_path)
+            try:
+                nifti_object = NiftiFile(file_path)
 
-            if not nifti_object: return
+                if not nifti_object: return
 
-            if len(nifti_object.get_dimensions()) != 3:
-                QMessageBox.critical(self, "Erreur", "Bad file dimension (only 3D)")
+                if len(nifti_object.get_dimensions()) != 3:
+                    QMessageBox.critical(self, "Erreur", "Bad file dimension (only 3D)")
+                    return
+
+                tracto_path_list = []
+                if self._current_session and self._current_session.volume_obj is None:
+                    index = self.session_selector.currentIndex()
+                    for tp in self._current_session.tracts.keys():
+                        tracto_path_list.append(tp)
+                    self._sessions.remove(self._current_session)
+                    self.session_selector.removeItem(index)
+
+                self._viewer.clear_previous_actors()
+                filename = Path(file_path).name
+                self._create_session(nifti_object, filename)
+                self._viewer.set_working_nifti_obj(nifti_object)
+                self._set_sliders_values(nifti_object.get_dimensions())
+                self._viewer.render_mode(self.mode_button.currentText())
+                self._set_slice_controls_enabled(self.mode_button.currentText().lower() == "slices")
+
+                for tp in tracto_path_list:
+                    to = Tractography(tp, self._current_session.get_uid(), reference_nifti=nifti_object)
+                    self._current_session.add_tract(to)
+                    self._viewer.show_tractogram(to)
+                    self.add_tracto_checkbox(tp)
+                self._current_session.apply()
+            except:
+                QMessageBox.critical(self, "Erreur", "Error loading volume file")
                 return
-
-            tracto_path_list = []
-            if self._current_session and self._current_session.volume_obj is None:
-                index = self.session_selector.currentIndex()
-                for tp in self._current_session.tracts.keys():
-                    tracto_path_list.append(tp)
-                self._sessions.remove(self._current_session)
-                self.session_selector.removeItem(index)
-
-            self._viewer.clear_previous_actors()
-            filename = Path(file_path).name
-            self._create_session(nifti_object, filename)
-            self._viewer.set_working_nifti_obj(nifti_object)
-            self._set_sliders_values(nifti_object.get_dimensions())
-            self._viewer.render_mode(self.mode_button.currentText())
-            self._set_slice_controls_enabled(self.mode_button.currentText().lower() == "slices")
-
-            for tp in tracto_path_list:
-                to = Tractography(tp, self._current_session.get_uid(), reference_nifti=nifti_object)
-                self._current_session.add_tract(to)
-                self._viewer.show_tractogram(to)
-                self.add_tracto_checkbox(tp)
-            self._current_session.apply()
 
     def _set_sliders_values(self, dimensions):
         if len(dimensions) > 3:
@@ -280,8 +284,7 @@ class WindowApp(QWidget):
 
             key = (self._current_session.get_uid(), file_path)
             if key in self._viewer.tract_actors:
-                QMessageBox.information(self,
-                                        "Tracto déjà chargé",
+                QMessageBox.information(self, "Tracto déjà chargé",
                                         f"Le fichier « {Path(file_path).name} » est déjà chargé dans cette session.")
                 return
 

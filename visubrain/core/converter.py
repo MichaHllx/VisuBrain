@@ -9,10 +9,11 @@ from pathlib import Path
 
 from dipy.io.stateful_tractogram import StatefulTractogram, Space
 from dipy.io.streamline import load_tractogram, save_tractogram
-from bvbabel.vmr import read_vmr, write_vmr, create_vmr
+from bvbabel.vmr import read_vmr
 
 from visubrain.io.fbr import BinaryFbrFile
 from visubrain.io.tractography import Tractography
+from visubrain.io.vmr import VMRFile
 
 
 class Converter:
@@ -67,108 +68,43 @@ class Converter:
     def _vmr_to_nii(self):
         try:
             header, data = read_vmr(self.input)
-            nii = nib.Nifti1Image(data, affine=np.eye(4))
+
+            colDirX = header["ColDirX"]
+            colDirY = header["ColDirY"]
+            colDirZ = header["ColDirZ"]
+
+            rowDirX = header["RowDirX"]
+            rowDirY = header["RowDirY"]
+            rowDirZ = header["RowDirZ"]
+
+            rowDir = np.array([rowDirX, rowDirY, rowDirZ])
+            colDir = np.array([colDirX, colDirY, colDirZ])
+
+            normal = np.cross(rowDir, colDir)
+
+            sliceCenterX = header["SliceNCenterX"]
+            sliceCenterY = header["SliceNCenterY"]
+            sliceCenterZ = header["SliceNCenterZ"]
+
+            custom_affine = np.eye(4)
+            custom_affine[0:3, 0] = rowDir
+            custom_affine[0:3, 1] = colDir
+            custom_affine[0:3, 2] = normal
+
+            if np.all(custom_affine[:3, :3] == 0):
+                custom_affine = np.eye(4) # proposer au user d'indiquer une anat de ref nifti pour avoir une mat affine corresp ?
+
+            custom_affine[0:3, 3] = [sliceCenterX, sliceCenterY, sliceCenterZ]
+
+            nii = nib.Nifti1Image(data, affine=custom_affine)
             nib.save(nii, self.output)
         except:
             raise ValueError("The input file is not a valid BrainVoyager VMR file.")
 
     def _nii_to_vmr(self):
-        """
-        The code for building the VMR file is a copy of part of the example as displayed on 15/05/2025 in the
-        bvbabel repository (https://github.com/ofgulban/bvbabel) in the file examples/read_nifti_write_vmr.py.
-
-        MIT License
-
-        Copyright (c) 2021 Omer Faruk Gulban
-
-        Permission is hereby granted, free of charge, to any person obtaining a copy
-        of this software and associated documentation files (the "Software"), to deal
-        in the Software without restriction, including without limitation the rights
-        to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-        copies of the Software, and to permit persons to whom the Software is
-        furnished to do so, subject to the following conditions:
-
-        The above copyright notice and this permission notice shall be included in all
-        copies or substantial portions of the Software.
-
-        THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-        IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-        FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-        AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-        LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-        OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
-        SOFTWARE.
-        """
         try:
-            nii = nib.load(self.input)
-            nii_data = np.nan_to_num(nii.get_fdata(), nan=0.)
-
-            v16_data = np.copy(nii_data)
-            thr_min, thr_max = np.percentile(v16_data[v16_data != 0], [0, 100])
-            v16_data[v16_data > thr_max] = thr_max
-            v16_data[v16_data < thr_min] = thr_min
-            v16_data = v16_data - thr_min
-            v16_data = v16_data / (thr_max - thr_min) * 65535
-            v16_data = np.asarray(v16_data, dtype=np.ushort)
-
-            dims = nii_data.shape
-            voxdims = [nii.header["pixdim"][1],
-                       nii.header["pixdim"][2],
-                       nii.header["pixdim"][3]]
-            # Create VMR
-            vmr_header, vmr_data = create_vmr()
-
-            # Update VMR data (type cast nifti data to uint8 after range normalization)
-            vmr_data = np.copy(nii_data)
-            thr_min, thr_max = np.percentile(vmr_data[vmr_data != 0], [1, 99])
-            vmr_data[vmr_data > thr_max] = thr_max
-            vmr_data[vmr_data < thr_min] = thr_min
-            vmr_data = vmr_data - thr_min
-            vmr_data = vmr_data / (thr_max - thr_min) * 225  # Special BV range
-            vmr_data = np.asarray(vmr_data, dtype=np.ubyte)
-
-            # Update VMR headers
-            vmr_header["ColDirX"] = 0.0
-            vmr_header["ColDirY"] = 0.0
-            vmr_header["ColDirZ"] = 0.0
-            vmr_header["CoordinateSystem"] = 0
-            vmr_header["DimX"] = dims[1]  # nii.header["dim"][2]
-            vmr_header["DimY"] = dims[2]  # nii.header["dim"][3]
-            vmr_header["DimZ"] = dims[0]  # nii.header["dim"][1]
-            vmr_header["File version"] = 4
-            vmr_header["FoVCols"] = 0.0
-            vmr_header["FoVRows"] = 0.0
-            vmr_header["FramingCubeDim"] = np.max(nii_data.shape)
-            vmr_header["GapThickness"] = 0.0
-            vmr_header["LeftRightConvention"] = 1
-            vmr_header["NCols"] = 0
-            vmr_header["NRows"] = 0
-            vmr_header["NrOfPastSpatialTransformations"] = 0  # List here is for affine
-            vmr_header["OffsetX"] = 0
-            vmr_header["OffsetY"] = 0
-            vmr_header["OffsetZ"] = 0
-            vmr_header["PosInfosVerified"] = 1
-            vmr_header["ReferenceSpaceVMR"] = 0
-            vmr_header["RowDirX"] = 0.0
-            vmr_header["RowDirY"] = 0.0
-            vmr_header["RowDirZ"] = 0.0
-            vmr_header["Slice1CenterX"] = 0.0
-            vmr_header["Slice1CenterY"] = 0.0
-            vmr_header["Slice1CenterZ"] = 0.0
-            vmr_header["SliceNCenterX"] = 0.0
-            vmr_header["SliceNCenterY"] = 0.0
-            vmr_header["SliceNCenterZ"] = 0.0
-            vmr_header["SliceThickness"] = 0.0
-            vmr_header["VMROrigV16MaxValue"] = int(np.max(v16_data))
-            vmr_header["VMROrigV16MeanValue"] = int(np.mean(v16_data))
-            vmr_header["VMROrigV16MinValue"] = int(np.min(v16_data))
-            vmr_header["VoxelResolutionInTALmm"] = 1
-            vmr_header["VoxelResolutionVerified"] = 1
-            vmr_header["VoxelSizeX"] = voxdims[0]
-            vmr_header["VoxelSizeY"] = voxdims[1]
-            vmr_header["VoxelSizeZ"] = voxdims[2]
-
-            write_vmr(self.output, vmr_header, vmr_data)
+            vmr_obj = VMRFile
+            vmr_obj.write_from_nifti(self.input, self.output)
         except:
             raise ValueError("The input file is not a valid Nifti file.")
 

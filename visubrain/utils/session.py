@@ -1,4 +1,4 @@
-# visubrain/gui/session.py
+# visubrain/utils/session.py
 from pathlib import Path
 
 import numpy as np
