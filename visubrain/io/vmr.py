@@ -10,12 +10,11 @@ class VMRFile:
     def __init__(self):
         pass
 
-    @staticmethod
-    def write_from_nifti(nifti_path, output):
+    def write_from_nifti(self, nifti_path, output):
         """
-        The code for building the VMR file is a copy (partially modified) of the vmr writing structure of part of the
-        example as displayed on 15/05/2025 in the bvbabel repository (https://github.com/ofgulban/bvbabel) in the file
-        "examples/read_nifti_write_vmr.py".
+        Part of the code for building the VMR file is a copy (partially modified and improved) of the vmr writing
+        structure of part of the example as displayed on 15/05/2025 in the bvbabel repository
+        (https://github.com/ofgulban/bvbabel) in the file "examples/read_nifti_write_vmr.py".
 
         MIT License
 
@@ -40,26 +39,17 @@ class VMRFile:
         SOFTWARE.
         """
         nii = nib.load(nifti_path)
-        affine = nii.affine
-        nii_data = np.nan_to_num(nii.get_fdata(), nan=0.)
+        nii_ras = nib.as_closest_canonical(nii)
+        nii_ras_data = np.nan_to_num(nii_ras.get_fdata(), nan=0.)
 
-        rowDirX = affine[0][0]
-        rowDirY = affine[1][0]
-        rowDirZ = affine[2][0]
+        rowDir, colDir, slice1Center, sliceNCenter = self._get_pos_from_nifti(nii_ras)
 
-        colDirX = affine[0][1]
-        colDirY = affine[1][1]
-        colDirZ = affine[2][1]
+        rowDirX, rowDirY, rowDirZ = rowDir
+        colDirX, colDirY, colDirZ = colDir
+        slice1CenX, slice1CenY, slice1CenZ = slice1Center
+        sliceNCenX, sliceNCenY, sliceNCenZ = sliceNCenter
 
-        normalX = affine[0][2]
-        normalY = affine[1][2]
-        normalZ = affine[2][2]
-
-        sliceCenX = affine[0][3]
-        sliceCenY = affine[1][3]
-        sliceCenZ = affine[2][3]
-
-        v16_data = np.copy(nii_data)
+        v16_data = np.copy(nii_ras_data)
         thr_min, thr_max = np.percentile(v16_data[v16_data != 0], [0, 100])
         v16_data[v16_data > thr_max] = thr_max
         v16_data[v16_data < thr_min] = thr_min
@@ -67,15 +57,15 @@ class VMRFile:
         v16_data = v16_data / (thr_max - thr_min) * 65535
         v16_data = np.asarray(v16_data, dtype=np.ushort)
 
-        dims = nii_data.shape
-        voxdims = [nii.header["pixdim"][1],
-                   nii.header["pixdim"][2],
-                   nii.header["pixdim"][3]]
+        dims = nii_ras_data.shape
+        voxdims = [nii_ras.header["pixdim"][1],
+                   nii_ras.header["pixdim"][2],
+                   nii_ras.header["pixdim"][3]]
         # Create VMR
         vmr_header, vmr_data = create_vmr()
 
         # Update VMR data (type cast nifti data to uint8 after range normalization)
-        vmr_data = np.copy(nii_data)
+        vmr_data = np.copy(nii_ras_data)
         thr_min, thr_max = np.percentile(vmr_data[vmr_data != 0], [1, 99])
         vmr_data[vmr_data > thr_max] = thr_max
         vmr_data[vmr_data < thr_min] = thr_min
@@ -88,15 +78,15 @@ class VMRFile:
         vmr_header["ColDirY"] = colDirY
         vmr_header["ColDirZ"] = colDirZ
         vmr_header["CoordinateSystem"] = 0
-        vmr_header["DimX"] = dims[1]  # nii.header["dim"][2]
-        vmr_header["DimY"] = dims[2]  # nii.header["dim"][3]
-        vmr_header["DimZ"] = dims[0]  # nii.header["dim"][1]
+        vmr_header["DimX"] = dims[1]  # nii_ras.header["dim"][2] y
+        vmr_header["DimY"] = dims[2]  # nii_ras.header["dim"][3] z
+        vmr_header["DimZ"] = dims[0]  # nii_ras.header["dim"][1] x
         vmr_header["File version"] = 4
         vmr_header["FoVCols"] = 0.0
         vmr_header["FoVRows"] = 0.0
-        vmr_header["FramingCubeDim"] = np.max(nii_data.shape)
+        vmr_header["FramingCubeDim"] = np.max(nii_ras_data.shape)
         vmr_header["GapThickness"] = 0.0
-        vmr_header["LeftRightConvention"] = 1
+        vmr_header["LeftRightConvention"] = 1 # radiological (1) LAS+ or neurological (0) RAS+ convention
         vmr_header["NCols"] = 0
         vmr_header["NRows"] = 0
         vmr_header["NrOfPastSpatialTransformations"] = 0  # List here is for affine
@@ -108,12 +98,12 @@ class VMRFile:
         vmr_header["RowDirX"] = rowDirX
         vmr_header["RowDirY"] = rowDirY
         vmr_header["RowDirZ"] = rowDirZ
-        vmr_header["Slice1CenterX"] = sliceCenX
-        vmr_header["Slice1CenterY"] = sliceCenY
-        vmr_header["Slice1CenterZ"] = sliceCenZ
-        vmr_header["SliceNCenterX"] = sliceCenX
-        vmr_header["SliceNCenterY"] = sliceCenY
-        vmr_header["SliceNCenterZ"] = sliceCenZ
+        vmr_header["Slice1CenterX"] = slice1CenX
+        vmr_header["Slice1CenterY"] = slice1CenY
+        vmr_header["Slice1CenterZ"] = slice1CenZ
+        vmr_header["SliceNCenterX"] = sliceNCenX
+        vmr_header["SliceNCenterY"] = sliceNCenY
+        vmr_header["SliceNCenterZ"] = sliceNCenZ
         vmr_header["SliceThickness"] = 0.0
         vmr_header["VMROrigV16MaxValue"] = int(np.max(v16_data))
         vmr_header["VMROrigV16MeanValue"] = int(np.mean(v16_data))
@@ -125,3 +115,49 @@ class VMRFile:
         vmr_header["VoxelSizeZ"] = voxdims[2]
 
         write_vmr(output, vmr_header, vmr_data)
+
+    @staticmethod
+    def _get_pos_from_nifti(nii):
+        header = nii.header
+        affine = nii.affine
+
+        voxx, voxy, voxz = header['pixdim'][1:4]
+        dimx, dimy, dimz = header['dim'][1:4]
+
+        # Rotation matrix: in NIfTI this is usually sform/srow, so affine[:3,:3].
+        rotationMatrix = affine.copy()
+        niipos = rotationMatrix
+
+        nii2dcm = np.array([
+            [-1, 0, 0, dimx - 1],
+            [0, -1, 0, dimy - 1],
+            [0, 0, 1, 0],
+            [0, 0, 0, 1]
+        ])
+
+        dcmposmatrix = np.dot(niipos, nii2dcm)
+
+        # First slice (middle x, middle y, z=0)
+        dcm2bv1 = np.array([
+            [1 / voxx, 0, 0, dimx / 2],
+            [0, 1 / voxy, 0, dimy / 2],
+            [0, 0, 1 / voxz, 0],
+            [0, 0, 0, 1]
+        ])
+        first = dcmposmatrix @ dcm2bv1
+
+        # Last slide (middle x, middle y, z=dimz-1)
+        dcm2bvn = np.array([
+            [1 / voxx, 0, 0, dimx / 2],
+            [0, 1 / voxy, 0, dimy / 2],
+            [0, 0, 1 / voxz, dimz - 1],
+            [0, 0, 0, 1]
+        ])
+        last = dcmposmatrix @ dcm2bvn
+
+        slice1Center = [first[0,3], first[1,3], first[2,3]]
+        sliceNCenter = [last[0,3], last[1,3], last[2,3]]
+        rowDir = [first[0,0], first[1,0], first[2,0]]
+        colDir = [first[0,1], first[1,1], first[2,1]]
+
+        return rowDir, colDir, slice1Center, sliceNCenter

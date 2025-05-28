@@ -1,7 +1,8 @@
 # visubrain/io/tractography.py
+import nibabel
 import numpy as np
 
-from dipy.io.streamline import load_tractogram, Origin
+from dipy.io.streamline import load_tractogram
 from dipy.tracking.streamline import transform_streamlines
 
 
@@ -16,16 +17,18 @@ class Tractography:
     def _load_streamlines(self):
         try:
             if self.file_path.endswith(".tck"):
-                if not self.reference_nifti: raise ValueError("A tck file needs an anatomical reference image beforehand.")
+                if not self.reference_nifti:
+                    raise ValueError("A tck file needs an anatomical reference image beforehand.")
                 sf_tracto = load_tractogram(filename=self.file_path, reference=self.reference_nifti.file_path)
             else:
-                sf_tracto = load_tractogram(filename=self.file_path, reference='same', to_origin=Origin.TRACKVIS)
-        except:
-            raise ValueError("Error while loading streamlines")
+                sf_tracto = load_tractogram(filename=self.file_path, reference='same')
+        except Exception as e:
+            raise ValueError(f"Error while loading streamlines: {e}")
 
         if self.reference_nifti is not None:
             affine = self.reference_nifti.affine
-            stream_reg = transform_streamlines(sf_tracto.streamlines, np.linalg.inv(affine)) # world streamlines coord -> voxel nifti space
+            # world streamlines coord RAS+mm -> voxel nifti image space
+            stream_reg = transform_streamlines(sf_tracto.streamlines, np.linalg.inv(affine))
             return stream_reg, sf_tracto
 
         return sf_tracto.streamlines, sf_tracto

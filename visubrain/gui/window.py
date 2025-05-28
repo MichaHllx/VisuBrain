@@ -282,6 +282,9 @@ class WindowApp(QWidget):
         file_path, _ = QFileDialog.getOpenFileName(self, "Add a tractography file", "", "(*.trk *.tck)")
         if file_path:
 
+            if self._current_session is None:
+                self._create_session(None, Path(file_path).name)
+
             key = (self._current_session.get_uid(), file_path)
             if key in self._viewer.tract_actors:
                 QMessageBox.information(self, "Tracto déjà chargé",
@@ -289,7 +292,9 @@ class WindowApp(QWidget):
                 return
 
             try:
-                tracto_obj = Tractography(file_path, self._current_session.get_uid(), reference_nifti=self._viewer.working_nifti_obj)
+                tracto_obj = Tractography(file_path,
+                                          self._current_session.get_uid(),
+                                          reference_nifti=self._viewer.working_nifti_obj)
             except Exception as e:
                 QMessageBox.information(self, "Error loading tractography file", f"{e}")
                 return
@@ -423,6 +428,9 @@ class WindowApp(QWidget):
 
     def change_slices_position(self, value, orientation):
         if self._viewer.working_nifti_obj:
+            if orientation.lower() == "sagittal":
+                control = self.slice_controls[orientation]
+                value = control.get_max() - int(value)
             self._viewer.schedule_slice_update(orientation.lower(), value, self._current_session.opacity)
 
     def _init_converter_tab(self):

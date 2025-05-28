@@ -6,6 +6,7 @@ from PyQt6.QtWidgets import QSlider, QLineEdit
 class SliceControl:
     def __init__(self, orientation: str, slider: QSlider, line_edit: QLineEdit):
         self.orientation = orientation
+        self.max = 0
         self.slider = slider
         self.line_edit = line_edit
 
@@ -24,7 +25,11 @@ class SliceControl:
             pass
 
     def set_max(self, max_val: int):
+        self.max = max_val
         self.slider.setMaximum(max_val)
+
+    def get_max(self) -> int:
+        return self.max
 
     def set_value(self, val: int):
         self.slider.setValue(val)

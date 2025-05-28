@@ -1,5 +1,4 @@
 # visubrain/gui/viewer.py
-from typing import Dict
 
 import pyvista as pv
 import numpy as np
@@ -7,7 +6,6 @@ import numpy as np
 from PyQt6.QtCore import QTimer
 from PyQt6.QtWidgets import QMessageBox
 from pyvistaqt import QtInteractor
-from vtkmodules.vtkRenderingCore import vtkActor
 
 
 def _slice_actor_key(file_path: str, axis: str) -> str:
@@ -25,7 +23,7 @@ class PyVistaViewer(QtInteractor):
         self.volume_3d_actor = None
         self.working_nifti_obj = None
 
-        self.tract_actors: Dict[tuple[int,str], vtkActor] = {}
+        self.tract_actors = {}
         self.align_streamlines = False
 
         self.slice_update_timer = QTimer()
@@ -79,16 +77,12 @@ class PyVistaViewer(QtInteractor):
                 actor.SetVisibility(True)
             if self.volume_3d_actor:
                 self.volume_3d_actor.SetVisibility(False)
-            for actor in self.tract_actors.values():
-                actor.SetVisibility(False)
 
         elif mode_lower == "volume 3d":
             if self.volume_3d_actor is None:
                 self.volume_3d_actor = self._create_volume_actor()
             self.volume_3d_actor.SetVisibility(True)
             for actor in self.volume_sliced_actor.values():
-                actor.SetVisibility(False)
-            for actor in self.tract_actors.values():
                 actor.SetVisibility(False)
 
         else:

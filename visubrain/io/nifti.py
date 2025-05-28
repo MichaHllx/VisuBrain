@@ -17,3 +17,12 @@ class NiftiFile:
 
     def get_dimensions(self):
         return self.shape
+
+    def get_header(self):
+        return self.image.header
+
+    def get_orientation(self):
+        return self.orient
+
+    def get_data(self):
+        return self.data

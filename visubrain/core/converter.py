@@ -52,8 +52,8 @@ class Converter:
         try:
             method_name = self._CONVERTERS[(self.in_ext, self.out_ext)]
             getattr(self, method_name)()
-        except:
-            raise ValueError(f"conversion {self.in_ext} to {self.out_ext}")
+        except Exception as e :
+            raise ValueError(f"Conversion {self.in_ext} to {self.out_ext} \n {e}")
 
     def _trk_to_tck(self):
         sft = load_tractogram(str(self.input), 'same')
@@ -68,38 +68,58 @@ class Converter:
     def _vmr_to_nii(self):
         try:
             header, data = read_vmr(self.input)
+            print(header)
 
             colDirX = header["ColDirX"]
             colDirY = header["ColDirY"]
             colDirZ = header["ColDirZ"]
+            colDir = np.array([colDirX, colDirY, colDirZ])
 
             rowDirX = header["RowDirX"]
             rowDirY = header["RowDirY"]
             rowDirZ = header["RowDirZ"]
-
             rowDir = np.array([rowDirX, rowDirY, rowDirZ])
-            colDir = np.array([colDirX, colDirY, colDirZ])
 
             normal = np.cross(rowDir, colDir)
 
-            sliceCenterX = header["SliceNCenterX"]
-            sliceCenterY = header["SliceNCenterY"]
-            sliceCenterZ = header["SliceNCenterZ"]
+            ImageOrientationDCM = np.column_stack((rowDir, colDir, normal))
 
-            custom_affine = np.eye(4)
-            custom_affine[0:3, 0] = rowDir
-            custom_affine[0:3, 1] = colDir
-            custom_affine[0:3, 2] = normal
+            # volume center position
+            Slice1Center = np.array([header["Slice1CenterX"], header["Slice1CenterY"], header["Slice1CenterZ"]])
+            SliceNCenter = np.array([header["SliceNCenterX"], header["SliceNCenterY"], header["SliceNCenterZ"]])
+            ImagePositionCentreDCM = (Slice1Center + SliceNCenter) / 2
 
-            if np.all(custom_affine[:3, :3] == 0):
-                custom_affine = np.eye(4) # proposer au user d'indiquer une anat de ref nifti pour avoir une mat affine corresp ?
+            # 4x4 matrix world (dicom) to patient
+            PixelSpacingDCM = np.array([header["VoxelSizeX"], header["VoxelSizeY"], header["VoxelSizeZ"]])# voxels size (mm)
+            dcm_to_patient = np.eye(4)
+            dcm_to_patient[:3, :3] = ImageOrientationDCM * PixelSpacingDCM.reshape(1, 3)
+            dcm_to_patient[:3, 3] = ImagePositionCentreDCM
 
-            custom_affine[0:3, 3] = [sliceCenterX, sliceCenterY, sliceCenterZ]
+            # center of the volume to corner (voxel origin)
+            DimX, DimY, DimZ = header["DimX"], header["DimY"], header["DimZ"]
+            ShiftCenter = np.eye(4)
+            ShiftCenter[0, 3] = -(DimX + 1) / 2
+            ShiftCenter[1, 3] = -(DimY + 2) / 2
+            ShiftCenter[2, 3] = -(DimZ + 2) / 2
+            # shift center to corner
+            dcm_to_patient = np.dot(dcm_to_patient, ShiftCenter)
 
-            nii = nib.Nifti1Image(data, affine=custom_affine)
+            patient_to_ras = np.diag([-1, -1, 1, 1]) # (flip X et Y)
+            Voxel2World = np.dot(patient_to_ras, dcm_to_patient)
+
+            if np.all(Voxel2World[:3, :3] == 0):
+                Voxel2World = np.eye(4)
+
+            nii = nib.Nifti1Image(data, affine=Voxel2World)
+            nii.header["pixdim"][1] = header["VoxelSizeX"]
+            nii.header["pixdim"][2] = header["VoxelSizeY"]
+            nii.header["pixdim"][3] = header["VoxelSizeZ"]
+            nii.header["dim"][2] = header["DimX"]
+            nii.header["dim"][3] = header["DimY"]
+            nii.header["dim"][1] = header["DimZ"]
             nib.save(nii, self.output)
         except:
-            raise ValueError("The input file is not a valid BrainVoyager VMR file.")
+            raise ValueError("Error while converting the VMR file.")
 
     def _nii_to_vmr(self):
         try:
@@ -150,8 +170,8 @@ class Converter:
 
         header = {
             'FileVersion': 5,
-            'CoordsType': 0, # RASmm
-            'FibersOrigin': [0.0, 0.0, 0.0],
+            'CoordsType': 2,
+            'FibersOrigin': [128.0, 128.0, 128.0],
             'NrOfGroups': 1,
             'Groups': [
                 {
@@ -197,7 +217,7 @@ class Converter:
     def _correct_fbr_to_nifti(self, streamlines, img):
         shape = np.array(img.shape[:3])
         affine = img.affine
-        center_voxel = (shape - 1) / 2.0
+        center_voxel = shape / 2.0
         center_mm = nib.affines.apply_affine(affine, center_voxel)
         scale = np.sign(np.diag(affine)[:3])
         streamlines_corr = [sl + center_mm for sl in streamlines]
