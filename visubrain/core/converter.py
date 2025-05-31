@@ -17,10 +17,31 @@ from visubrain.io.vmr import VMRFile
 
 
 class Converter:
+    """
+    Utility class to convert between different neuroimaging file formats (VMR, NIfTI, VOI, TRK, TCK, FBR).
+
+    Handles conversions, manages file extension detection and provides multiple private methods
+    for each specific conversion.
+
+    Attributes:
+        input (str): Path to the input file.
+        output (str): Path to the output file.
+        anatomical_ref (str | None): Optional anatomical reference for certain conversions.
+        in_ext (str): Extension of the input file.
+        out_ext (str): Extension of the output file.
+    """
     def __init__(self,
                  input_file: str,
                  output_file: str,
                  anatomical_ref: str | None = None):
+        """
+        Initialize the Converter.
+
+        Args:
+            input_file (str): Path to the input file.
+            output_file (str): Path to the output file.
+            anatomical_ref (str, optional): Anatomical reference, required for some formats (e.g., tck, fbr).
+        """
         self.input = input_file
         self.output = output_file
 
@@ -44,11 +65,23 @@ class Converter:
     }
 
     def _validate_extensions(self):
+        """
+        Validate that the combination of input and output extensions is supported.
+
+        Raises:
+            ValueError: If the conversion is not supported.
+        """
         key = (self.in_ext, self.out_ext)
         if key not in self._CONVERTERS:
             raise ValueError(f"Conversion {key} not supported")
 
     def convert(self):
+        """
+        Perform the conversion by dispatching to the appropriate method.
+
+        Raises:
+            ValueError: If conversion fails.
+        """
         try:
             method_name = self._CONVERTERS[(self.in_ext, self.out_ext)]
             getattr(self, method_name)()
@@ -56,16 +89,29 @@ class Converter:
             raise ValueError(f"Conversion {self.in_ext} to {self.out_ext} \n {e}")
 
     def _trk_to_tck(self):
+        """Convert a .trk tractography file to .tck format."""
         sft = load_tractogram(str(self.input), 'same')
         save_tractogram(sft, str(self.output))
 
     def _tck_to_trk(self):
+        """
+        Convert a .tck tractography file to .trk format.
+
+        Raises:
+            ValueError: If anatomical reference is not provided.
+        """
         if self.anatomical_ref is None:
             raise ValueError("A tck file needs an anatomical reference file.")
         sft = load_tractogram(self.input, self.anatomical_ref)
         save_tractogram(sft, self.output)
 
     def _vmr_to_nii(self):
+        """
+        Convert a VMR file to NIfTI (.nii) format.
+
+        Raises:
+            ValueError: If conversion fails.
+        """
         try:
             header, data = read_vmr(self.input)
             print(header)
@@ -122,6 +168,12 @@ class Converter:
             raise ValueError("Error while converting the VMR file.")
 
     def _nii_to_vmr(self):
+        """
+        Convert a NIfTI (.nii) file to VMR format.
+
+        Raises:
+            ValueError: If the input file is not a valid NIfTI file.
+        """
         try:
             vmr_obj = VMRFile
             vmr_obj.write_from_nifti(self.input, self.output)
@@ -129,23 +181,28 @@ class Converter:
             raise ValueError("The input file is not a valid Nifti file.")
 
     def _voi_to_nii(self):
+        """Convert a VOI (gzipped) file to uncompressed NIfTI (.nii)."""
         with gzip.open(self.input, 'rb') as f_in:
             with open(self.output, 'wb') as f_out:
                 shutil.copyfileobj(f_in, f_out)
 
     def _voi_to_nii_gz(self):
+        """Copy a VOI file to a NIfTI compressed format (.nii.gz)."""
         shutil.copy(self.input, self.output)
 
     def _nii_to_voi(self):
+        """Convert a NIfTI (.nii) file to gzipped VOI format."""
         with open(self.input, 'rb') as f_in:
             with gzip.open(self.output, 'wb') as f_out:
                 shutil.copyfileobj(f_in, f_out)
 
     def _nii_gz_to_voi(self):
+        """Copy a gzipped NIfTI file (.nii.gz) to VOI format."""
         shutil.copy(self.input, self.output)
 
     def _trk_to_fbr(self):
-        tracto_obj = Tractography(str(self.input))
+        """Convert a .trk tractography file to .fbr format."""
+        tracto_obj = Tractography(str(self.input), 0)
 
         points, colors, connectivity = tracto_obj.get_color_points(show_points=False)
 
@@ -155,7 +212,16 @@ class Converter:
 
     @staticmethod
     def _prepare_fbr_data_from_trk(streamlines, colors):
+        """
+        Prepare the header and fiber data for writing an FBR file from TRK streamlines.
 
+        Args:
+            streamlines (list): List of streamlines.
+            colors (list): List of colors for each point in each streamline.
+
+        Returns:
+            tuple: Header dict, fibers list.
+        """
         fibers = []
         for streamline, color in zip(streamlines, colors):
             fiber = {
@@ -187,6 +253,12 @@ class Converter:
         return header, fibers
 
     def _fbr_to_trk(self):
+        """
+        Convert a .fbr fiber bundle file to .trk tractography format.
+
+        Raises:
+            ValueError: If anatomical reference is not provided.
+        """
         if self.anatomical_ref is None:
             raise ValueError("A fbr file needs an anatomical reference file.")
         fbr_obj = BinaryFbrFile(self.input)
@@ -198,6 +270,16 @@ class Converter:
         save_tractogram(tracto, self.output)
 
     def _prepare_trk_data_from_fbr(self, fbr_obj, ref_img):
+        """
+        Prepare TRK streamlines from an FBR file object and a NIfTI reference image.
+
+        Args:
+            fbr_obj (BinaryFbrFile): FBR file object.
+            ref_img (nib.Nifti1Image): Reference NIfTI image.
+
+        Returns:
+            list: List of valid streamlines.
+        """
         streamlines = []
         data_per_point = {'colors': []}
         for group in fbr_obj.groups:
@@ -215,6 +297,16 @@ class Converter:
         return valid_streamlines
 
     def _correct_fbr_to_nifti(self, streamlines, img):
+        """
+        Apply translation/scaling to streamlines to fit NIfTI space.
+
+        Args:
+            streamlines (list): List of streamlines.
+            img (nib.Nifti1Image): Reference image.
+
+        Returns:
+            list: List of corrected streamlines.
+        """
         shape = np.array(img.shape[:3])
         affine = img.affine
         center_voxel = shape / 2.0
@@ -224,6 +316,16 @@ class Converter:
         return streamlines_corr
 
     def _filter_valid_streamlines(self, streamlines, img):
+        """
+        Filter out streamlines that are not valid in the NIfTI image space.
+
+        Args:
+            streamlines (list): List of streamlines.
+            img (nib.Nifti1Image): Reference image.
+
+        Returns:
+            list: List of valid streamlines.
+        """
         shape = np.array(img.shape[:3])
         inv_aff = np.linalg.inv(img.affine)
         valid = []

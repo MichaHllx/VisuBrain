@@ -7,36 +7,26 @@ from bvbabel.vmr import write_vmr, create_vmr
 
 
 class VMRFile:
+    """
+    Class to handle VMR file creation and manipulation.
+
+    Provides methods to write a VMR file from a NIfTI file using the bvbabel library.
+    """
+
     def __init__(self):
         pass
 
     def write_from_nifti(self, nifti_path, output):
         """
-        Part of the code for building the VMR file is a copy (partially modified and improved) of the vmr writing
-        structure of part of the example as displayed on 15/05/2025 in the bvbabel repository
-        (https://github.com/ofgulban/bvbabel) in the file "examples/read_nifti_write_vmr.py".
+        Write a VMR file from a NIfTI file.
 
-        MIT License
+        This method converts a NIfTI file into a BrainVoyager VMR file format (.vmr),
+        with headers and intensity normalization as needed for compatibility.
+        Code structure is adapted from bvbabel's example.
 
-        Copyright (c) 2021 Omer Faruk Gulban
-
-        Permission is hereby granted, free of charge, to any person obtaining a copy
-        of this software and associated documentation files (the "Software"), to deal
-        in the Software without restriction, including without limitation the rights
-        to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-        copies of the Software, and to permit persons to whom the Software is
-        furnished to do so, subject to the following conditions:
-
-        The above copyright notice and this permission notice shall be included in all
-        copies or substantial portions of the Software.
-
-        THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-        IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-        FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-        AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-        LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-        OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
-        SOFTWARE.
+        Args:
+            nifti_path (str): Path to the input NIfTI file.
+            output (str): Output path for the VMR file.
         """
         nii = nib.load(nifti_path)
         nii_ras = nib.as_closest_canonical(nii)
@@ -118,6 +108,15 @@ class VMRFile:
 
     @staticmethod
     def _get_pos_from_nifti(nii):
+        """
+        Compute spatial orientation and position vectors from a NIfTI image.
+
+        Args:
+            nii (nibabel.Nifti1Image): Input NIfTI image.
+
+        Returns:
+            tuple: (rowDir, colDir, slice1Center, sliceNCenter)
+        """
         header = nii.header
         affine = nii.affine
 

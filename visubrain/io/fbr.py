@@ -3,8 +3,20 @@
 import struct
 
 class BinaryFbrFile:
+    """
+    Class for reading and writing custom FBR (fiber) binary files.
+
+    Handles parsing, reading and writing FBR files containing tractography/fiber data,
+    including fibers groups, coordinates and colors.
+    """
 
     def __init__(self, fbr_file=None):
+        """
+        Initialize the BinaryFbrFile class and optionally read an FBR file.
+
+        Args:
+            fbr_file (str, optional): Path to the FBR file to load.
+        """
         self._fbr_file = fbr_file
         self._magic = None
         self._file_version = None
@@ -17,22 +29,28 @@ class BinaryFbrFile:
             self._read()
 
     def _read(self):
+        """
+        Read and parse the FBR binary file and populate object attributes.
+
+        Raises:
+            ValueError: If file is invalid or does not start with the expected magic bytes.
+        """
         with open(self._fbr_file, 'rb') as f:
-            # Lire et vérifier les octets magiques
+            # Read and check the magic bytes
             self._magic = f.read(4)
             if self._magic != b'\xa4\xd3\xc2\xb1':
-                raise ValueError("Fichier FBR invalide : octets magiques incorrects")
+                raise ValueError("Invalid FBR file: incorrect magic bytes")
 
-            # Lire les champs header
+            # Read header fields
             self._file_version = struct.unpack('<I', f.read(4))[0]
             self._coords_type = struct.unpack('<I', f.read(4))[0]
             self.fibers_origin = struct.unpack('<3f', f.read(12))
             self._num_groups = struct.unpack('<I', f.read(4))[0]
 
-            # Lire les groupes
+            # Read groups
             for _ in range(self._num_groups):
                 group = {}
-                # Lire le nom du groupe (! fin avec un caractère nul !)
+                # Read group name (null-terminated)
                 group_name = bytearray()
                 while True:
                     char = f.read(1)
@@ -41,7 +59,7 @@ class BinaryFbrFile:
                     group_name += char
                 group['name'] = group_name.decode('latin-1')
 
-                # Lire les propriétés du groupe
+                # Read group properties
                 group['visible'] = struct.unpack('<I', f.read(4))[0]
                 group['animate'] = struct.unpack('<i', f.read(4))[0]
                 group['thickness'] = struct.unpack('<f', f.read(4))[0]
@@ -54,14 +72,14 @@ class BinaryFbrFile:
                     fiber = {}
                     num_points = struct.unpack('<I', f.read(4))[0]
 
-                    # Lire les points de la fibre (coordonnées)
+                    # Read fiber points (coordinates)
                     points_data = struct.unpack(f'<{3 * num_points}f', f.read(12 * num_points))
                     x_coords = points_data[:num_points]
                     y_coords = points_data[num_points:2 * num_points]
                     z_coords = points_data[2 * num_points:]
                     fiber['points'] = list(zip(x_coords, y_coords, z_coords))
 
-                    # Lire les couleurs des points (RGB)
+                    # Read fiber colors (RGB)
                     colors_data = struct.unpack(f'<{3 * num_points}B', f.read(3 * num_points))
                     r_values = colors_data[:num_points]
                     g_values = colors_data[num_points:2 * num_points]
@@ -73,51 +91,64 @@ class BinaryFbrFile:
 
     @staticmethod
     def write_fbr(output_fbr_file_path, header, fibers):
+        """
+        Write fiber data to a FBR binary file in the required format.
+
+        Args:
+            output_fbr_file_path (str): Output path for the FBR file.
+            header (dict): Header dictionary describing file and group properties.
+            fibers (list): List of fiber dictionaries (points and colors).
+        """
         with open(output_fbr_file_path, 'wb') as f:
-            # Écrire les octets magiques
+            # Write magic bytes
             f.write(b'\xa4\xd3\xc2\xb1')
 
-            # Écrire le header
+            # Write header
             f.write(struct.pack('<I', header['FileVersion']))
             f.write(struct.pack('<I', header['CoordsType']))
-            f.write(struct.pack('<3f', *header['FibersOrigin'])) # l'astérisque permet de "décompacter" la liste
+            f.write(struct.pack('<3f', *header['FibersOrigin']))
             f.write(struct.pack('<I', header['NrOfGroups']))
 
-            # Écrire les groupes et les fibres
+            # Write groups and fibers
             for group in header['Groups']:
-                # Écrire le nom du groupe (caractère nul à la fin !)
+                # Write group name (null-terminated)
                 f.write(group['Name'].encode('latin-1') + b'\x00')
 
-                # Écrire les propriétés du groupe
+                # Write group properties
                 f.write(struct.pack('<I', group['Visible']))
                 f.write(struct.pack('<i', group['Animate']))
                 f.write(struct.pack('<f', group['Thickness']))
                 f.write(struct.pack('<3B', *group['Color']))
                 f.write(struct.pack('<I', group['NrOfFibers']))
 
-                # pour respecter format fbr binaire, obligation d'écrire tous les x puis tous les y puis tous les z, etc
                 for fiber in fibers:
                     f.write(struct.pack('<I', fiber['NrOfPoints']))
 
-                    # toutes les coordonnées X
+                    # Write all X coordinates
                     f.write(struct.pack(f'<{fiber["NrOfPoints"]}f', *(point[0] for point in fiber['Points'])))
 
-                    # toutes les coordonnées Y
+                    # Write all Y coordinates
                     f.write(struct.pack(f'<{fiber["NrOfPoints"]}f', *(point[1] for point in fiber['Points'])))
 
-                    # toutes les coordonnées Z
+                    # Write all Z coordinates
                     f.write(struct.pack(f'<{fiber["NrOfPoints"]}f', *(point[2] for point in fiber['Points'])))
 
-                    # toutes les couleurs R
+                    # Write all R colors
                     f.write(struct.pack(f'<{fiber["NrOfPoints"]}B', *(point[3] for point in fiber['Points'])))
 
-                    # toutes les couleurs G
+                    # Write all G colors
                     f.write(struct.pack(f'<{fiber["NrOfPoints"]}B', *(point[4] for point in fiber['Points'])))
 
-                    # toutes les couleurs B
+                    # Write all B colors
                     f.write(struct.pack(f'<{fiber["NrOfPoints"]}B', *(point[5] for point in fiber['Points'])))
 
     def get_fiber_coordinates(self):
+        """
+        Get a list of all fiber coordinates in all groups.
+
+        Returns:
+            list: List of lists of fiber coordinates for each group.
+        """
         coordinates = []
         for group in self.groups:
             for fiber in group['fibers']:
@@ -125,6 +156,12 @@ class BinaryFbrFile:
         return coordinates
 
     def get_header(self):
+        """
+        Return a string describing the main header fields of the FBR file.
+
+        Returns:
+            str: Header summary.
+        """
         dico =  {
             'FBRFile' : self._fbr_file,
             'Animate' : ','.join([str(g['animate']) for g in self.groups]),

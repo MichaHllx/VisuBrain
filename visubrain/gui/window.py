@@ -19,8 +19,31 @@ from visubrain.io.tractography import Tractography
 
 
 class WindowApp(QWidget):
+    """
+    Main application window for VisuBrain, orchestrating all GUI logic.
+
+    This window coordinates the interaction between user actions (file loading, visualization mode changes, etc.),
+    the anatomical and tractography data (NiftiFile, Tractography), and the 3D viewer (PyVistaViewer).
+    It allows for multi-session support, synchronized GUI controls (slice, zoom, mode), and provides entry points
+    for all main VisuBrain workflows: viewing, converting, and reporting on data.
+
+    Attributes:
+        _main_layout (QVBoxLayout): The main vertical layout.
+        _viewer (PyVistaViewer): 3D/2D anatomical and tractography viewer widget.
+        _sessions (list of Session): All user-created sessions, each holding a unique dataset and state.
+        _current_session (Session or None): Currently selected session.
+        _tabs (QTabWidget): Main tab container (Viewer, Converter, etc.).
+        _visualization_tab (QWidget): Main tab for the viewer.
+        _left_control_panel (QVBoxLayout): Panel for viewer controls (slice, mode, opacity).
+        _right_control_panel (QVBoxLayout): Panel for viewer controls (zoom, reset).
+        slice_controls (dict): Orientation to SliceControl mapping for slice navigation.
+        tracto_checkboxes (dict): Mapping of (session, file_path) to tractography visibility checkbox.
+    """
 
     def __init__(self):
+        """
+        Initialize the main application window, layouts, and all interactive GUI controls.
+        """
         super().__init__()
 
         # main app layout
@@ -39,6 +62,11 @@ class WindowApp(QWidget):
         self.setLayout(self._main_layout)
 
     def _build_menu_bar(self):
+        """
+        Build the main menu bar (File, Statistics, About), connecting to all application actions.
+
+        The menu enables file loading (NIfTI, tractography), screenshots, statistics, and license view.
+        """
         menu_bar = QMenuBar(self)
         self._main_layout.setMenuBar(menu_bar)
 
@@ -78,12 +106,20 @@ class WindowApp(QWidget):
         about_menu.addAction(view_license_action)
 
     def _init_tabs(self):
+        """
+        Create and add all main application tabs, such as the Viewer and Converter.
+        """
         self._tabs = QTabWidget()
         self._main_layout.addWidget(self._tabs)
         self._init_viz_tab()
         self._init_converter_tab()
 
     def _init_viz_tab(self):
+        """
+        Initialize the Viewer tab with its control panels, slice controls, and viewer widget.
+
+        This includes all anatomical and tractography navigation tools.
+        """
         self._visualization_tab = QWidget()
         self._left_control_panel = QVBoxLayout()
         self._right_control_panel = QVBoxLayout()
@@ -95,6 +131,12 @@ class WindowApp(QWidget):
         self._build_viz_tab()
 
     def _build_viz_tab(self):
+        """
+        Build the layout and all interactive controls for the Viewer tab.
+
+        Controls include session switching, renaming, slice navigation, background, opacity,
+        render mode, time/frame (for 4D), and zoom.
+        """
         # main layout for viz tab
         viz_layout = QHBoxLayout()
 
@@ -168,6 +210,18 @@ class WindowApp(QWidget):
         mode_layout.addWidget(self.mode_button)
         self._left_control_panel.addLayout(mode_layout)
 
+        # contrôle des séries temporelles (fichier 4D)
+        time_layout = QHBoxLayout()
+        self.time_slider = QSlider(Qt.Horizontal)
+        self.time_slider.setMinimum(0)
+        self.time_slider.setVisible(False)  # On l'affiche seulement pour les volumes 4D
+        self.time_slider.valueChanged.connect(self.on_time_slider_changed)
+        self.label_time_slider = QLabel("Time/frame:")
+        self.label_time_slider.setVisible(False)
+        time_layout.addWidget(self.label_time_slider)
+        time_layout.addWidget(self.time_slider)
+        self._left_control_panel.addLayout(time_layout)
+
         # contrôle pour le zoom
         zoom_layout = QVBoxLayout()
         self.zoom_slider = QSlider(Qt.Vertical)
@@ -190,7 +244,21 @@ class WindowApp(QWidget):
 
         self._visualization_tab.setLayout(viz_layout)
 
+    def on_time_slider_changed(self, value):
+        """
+        Callback to update the viewer's displayed frame for 4D NIfTI data.
+
+        Args:
+            value (int): New time frame index selected by the user.
+        """
+        if self._viewer.working_nifti_obj and hasattr(self._viewer.working_nifti_obj, "is_4d"):
+            if self._viewer.working_nifti_obj.is_4d():
+                self._viewer.set_time_frame(value)
+
     def _on_view_license(self):
+        """
+        Display the VisuBrain license in a modal dialog.
+        """
         try:
             license_path = Path(__file__).parent.parent.parent / "LICENSE.txt"
             with open(license_path, 'r') as file:
@@ -212,6 +280,12 @@ class WindowApp(QWidget):
         dialog.exec()
 
     def _on_load_volume(self):
+        """
+        Open a file dialog to load a NIfTI anatomical volume, creating a new Session.
+
+        On successful loading, resets or creates a new session, updates all GUI controls,
+        and synchronizes the 3D viewer.
+        """
         file_path, _ = QFileDialog.getOpenFileName(self, "Add a volume/anatomical file", "", "(*.nii *.nii.gz)")
         if file_path:
             try:
@@ -219,9 +293,18 @@ class WindowApp(QWidget):
 
                 if not nifti_object: return
 
-                if len(nifti_object.get_dimensions()) != 3:
-                    QMessageBox.critical(self, "Erreur", "Bad file dimension (only 3D)")
+                if len(nifti_object.get_dimensions()) not in (3, 4):
+                    QMessageBox.critical(self, "Erreur", "Bad file dimension (only 3D/4D)")
                     return
+                if len(nifti_object.get_dimensions()) == 4:
+                    tmax = nifti_object.get_dimensions()[3]
+                    self.time_slider.setMaximum(tmax - 1)
+                    self.time_slider.setValue(0)
+                    self.time_slider.setVisible(True)
+                    self.label_time_slider.setVisible(True)
+                else:
+                    self.time_slider.setVisible(False)
+                    self.label_time_slider.setVisible(False)
 
                 tracto_path_list = []
                 if self._current_session and self._current_session.volume_obj is None:
@@ -250,6 +333,12 @@ class WindowApp(QWidget):
                 return
 
     def _set_sliders_values(self, dimensions):
+        """
+        Set the position and maximum values of all anatomical slice controls based on volume dimensions.
+
+        Args:
+            dimensions (tuple): Shape of the loaded NIfTI data.
+        """
         if len(dimensions) > 3:
             dimensions = dimensions[:3]
 
@@ -261,15 +350,27 @@ class WindowApp(QWidget):
             elif ori == "Sagittal": control.set_value((x - 1) // 2)
 
     def change_slice_opacity(self, value):
+        """
+        Update slice opacity for the current session and all displayed slices.
+
+        Args:
+            value (int): Opacity value from 0 to 100.
+        """
         self._current_session.opacity = value / 100.0 # valeur flottante entre 0 et 1
         if self._viewer.working_nifti_obj:
             self._viewer.update_slice_opacity(self._current_session.opacity)
 
     def reset_cam_zoom(self):
+        """
+        Reset the viewer's camera zoom to default (100%).
+        """
         self.zoom_slider.setValue(100)
         self._viewer.reset_view()
 
     def take_screenshot(self):
+        """
+        Save a screenshot of the current viewer display to a PNG file.
+        """
         fileName, _ = QFileDialog.getSaveFileName(self, "Save screenshot", "", "PNG Files (*.png)")
         if fileName:
             try:
@@ -279,6 +380,11 @@ class WindowApp(QWidget):
                 QMessageBox.information(self, "Screenshot", f"Error saving screenshot: {e}")
 
     def _on_load_streamlines(self):
+        """
+        Open a file dialog to load a tractography file (TRK or TCK) into the current session.
+
+        Will create a session if necessary and handle multiple tractographies per session.
+        """
         file_path, _ = QFileDialog.getOpenFileName(self, "Add a tractography file", "", "(*.trk *.tck)")
         if file_path:
 
@@ -313,6 +419,11 @@ class WindowApp(QWidget):
             self.add_tracto_checkbox(file_path)
 
     def view_tracts_statistics(self):
+        """
+        Show statistics report (number and length) for all tractographies in the current session.
+
+        This is aggregated using Session.tract_statistics().
+        """
         if not self._current_session or not self._current_session.tracts:
             QMessageBox.information(self, "Tractography Statistics", "No tractography data available")
             return
@@ -321,6 +432,13 @@ class WindowApp(QWidget):
         QMessageBox.information(self, "Tractography Statistics", "\n\n".join(report_lines))
 
     def _create_session(self, volume_obj, filename):
+        """
+        Create and add a new session, initialize GUI and set as current.
+
+        Args:
+            volume_obj (NiftiFile or None): Anatomical NIfTI file for the session.
+            filename (str): Display name for the session.
+        """
         display_name = f"Session {len(self._sessions) + 1}: " + filename
         session = Session(display_name, volume_obj, self._viewer)
         self._sessions.append(session)
@@ -331,6 +449,12 @@ class WindowApp(QWidget):
         self.rename_button.setVisible(True)
 
     def switch_session(self, selected_label):
+        """
+        Switch to a different user session and update the GUI and viewer state.
+
+        Args:
+            selected_label (str): Display label of the session to activate.
+        """
         # on save l'état de la current sess
         self._save_current_session_state()
         self._viewer.clear_previous_actors()
@@ -359,6 +483,11 @@ class WindowApp(QWidget):
                 checkbox.setVisible(checkbox.associated_session == selected_label)
 
     def _save_current_session_state(self):
+        """
+        Save all relevant display and navigation parameters for the current session.
+
+        This includes slice positions, opacity, zoom, background color, and rendering mode.
+        """
         if self._current_session and self._current_session.volume_obj:
             for ori, control in self.slice_controls.items():
                 self._current_session.slice_positions[ori.lower()] = control.get_value()
@@ -368,19 +497,49 @@ class WindowApp(QWidget):
             self._current_session.rendering_mode = self.mode_button.currentText()
 
     def on_mode_changed(self, mode):
+        """
+        Callback for when the user changes the rendering mode ("Slices", "Volume 3D").
+
+        Args:
+            mode (str): The new rendering mode selected by the user.
+        """
         self._viewer.render_mode(mode)
         self._set_slice_controls_enabled(mode.lower() == "slices")
         if self._current_session.volume_obj:
             self._set_sliders_values(self._current_session.volume_obj.get_dimensions())
 
     def _set_sliders_maximum(self, dimensions):
-        x, y, z = dimensions
+        """
+        Set the maximum allowed value for all anatomical slice controls, based on data dimensions.
+
+        Args:
+            dimensions (tuple): Shape of the loaded volume.
+        """
+        if len(dimensions) == 3:
+            x, y, z = dimensions
+        elif len(dimensions) == 4:
+            x, y, z, t = dimensions
+            self.time_slider.setMaximum(t - 1)
+            self.time_slider.setValue(0)
+            self.time_slider.setVisible(True)
+            self.label_time_slider.setVisible(True)
+        else:
+            raise ValueError("Volume must be 3D or 4D.")
+
         for ori, control in self.slice_controls.items():
-            if ori == "Axial": control.set_max(z - 1)
-            elif ori == "Coronal": control.set_max(y - 1)
-            elif ori == "Sagittal": control.set_max(x - 1)
+            if ori == "Axial":
+                control.set_max(z - 1)
+            elif ori == "Coronal":
+                control.set_max(y - 1)
+            elif ori == "Sagittal":
+                control.set_max(x - 1)
+
 
     def rename_current_session(self):
+        """
+        Rename the current session with the name entered in the rename_lineedit.
+        Updates the session selector and all associated tractography checkboxes.
+        """
         self.rename_lineedit.setVisible(True)
         self.rename_button.setText("Rename")
         if not self._current_session:
@@ -407,6 +566,12 @@ class WindowApp(QWidget):
         self.rename_button.setText("New session name")
 
     def add_tracto_checkbox(self, file_path):
+        """
+        Add a checkbox to toggle visibility of a loaded tractography file in the current session.
+
+        Args:
+            file_path (str): Path to the tractography file.
+        """
         sid = self._current_session.get_uid()
         checkbox = QCheckBox(f"Tractography: {Path(file_path).name}")
         checkbox.setChecked(True)
@@ -421,12 +586,25 @@ class WindowApp(QWidget):
         self._left_control_panel.addWidget(checkbox)
 
     def _set_slice_controls_enabled(self, enabled: bool):
+        """
+        Enable or disable all slice controls and opacity slider.
+
+        Args:
+            enabled (bool): If True, controls are enabled; otherwise, disabled.
+        """
         for control in self.slice_controls.values():
             control.slider.setEnabled(enabled)
             control.line_edit.setEnabled(enabled)
         self._opacity_slider.setEnabled(enabled)
 
     def change_slices_position(self, value, orientation):
+        """
+        Callback to change the slice position in the viewer for a given orientation.
+
+        Args:
+            value (int): New position value.
+            orientation (str): Slice orientation ("Axial", "Coronal", "Sagittal").
+        """
         if self._viewer.working_nifti_obj:
             if orientation.lower() == "sagittal":
                 control = self.slice_controls[orientation]
@@ -434,11 +612,17 @@ class WindowApp(QWidget):
             self._viewer.schedule_slice_update(orientation.lower(), value, self._current_session.opacity)
 
     def _init_converter_tab(self):
+        """
+        Initialize the converter tab for file format conversion.
+        """
         self._converter_tab = QWidget()
         self._tabs.addTab(self._converter_tab, "Converter")
         self._build_converter_tab()
 
     def _build_converter_tab(self):
+        """
+        Build and layout all controls of the converter tab (input, reference, output, format selection).
+        """
         converter_layout = QVBoxLayout()
 
         # Entry file
@@ -486,6 +670,10 @@ class WindowApp(QWidget):
         self._converter_tab.setLayout(converter_layout)
 
     def _browse_input(self):
+        """
+        Open a file dialog to select the input file for conversion.
+        Updates the input_edit field and available output formats.
+        """
         path, _ = QFileDialog.getOpenFileName(self, "Open file", "", "All Files (*)")
         if not path: return
         self.input_edit.setText(path)
@@ -495,16 +683,26 @@ class WindowApp(QWidget):
         self.out_combo.addItems(combos)
 
     def _browse_reference(self):
+        """
+        Open a file dialog to select an anatomical reference file for conversion.
+        """
         path, _ = QFileDialog.getOpenFileName(self, "Choose an anatomical reference", "", "(*.nii *.nii.gz)")
         if path:
             self.ref_edit.setText(path)
 
     def _browse_output(self):
+        """
+        Open a file dialog to specify the output path and filename for the converted file.
+        """
         path, _ = QFileDialog.getSaveFileName(self, "Save as", "", f"*.{self.out_combo.currentText()}")
         if path:
             self.output_edit.setText(path)
 
     def _on_convert(self):
+        """
+        Perform the conversion using the selected input, output, and optional reference file.
+        Shows a message box indicating success or failure.
+        """
         inp = self.input_edit.text().strip()
         out = self.output_edit.text().strip()
         ref = self.ref_edit.text().strip() or None
