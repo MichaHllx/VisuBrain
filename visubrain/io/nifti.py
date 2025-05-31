@@ -1,4 +1,16 @@
-# visubrain/io/nifti.py
+"""
+visubrain/io/nifti.py
+
+Module for loading and handling NIfTI anatomical files in the VisuBrain application.
+
+Provides the NiftiFile class for reading NIfTI images (.nii, .nii.gz), extracting data arrays,
+affine transformations, orientation codes, and supporting both 3D and 4D volumes. Integrates
+with VisuBrain's visualization, session management, and tractography workflows.
+
+Classes:
+    NiftiFile: Class for loading, querying, and extracting information from NIfTI files.
+"""
+
 
 import nibabel as nib
 

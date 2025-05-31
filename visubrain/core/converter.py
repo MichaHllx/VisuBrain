@@ -1,11 +1,24 @@
-# visubrain/core/converter.py
+
+"""
+visubrain/core/converter.py
+
+Module for converting neuroimaging file formats in the VisuBrain project.
+
+Provides the Converter class, which enables conversion between anatomical and tractography
+file formats (such as NIfTI, TRK, TCK, FBR, VMR) with optional anatomical reference handling.
+Supports seamless integration with VisuBrain's GUI and batch operations.
+
+Classes:
+    Converter: Handles file format conversion for neuroimaging and tractography data.
+"""
+
+
 import gzip
 import shutil
+from pathlib import Path
 
 import numpy as np
 import nibabel as nib
-
-from pathlib import Path
 
 from dipy.io.stateful_tractogram import StatefulTractogram, Space
 from dipy.io.streamline import load_tractogram, save_tractogram
@@ -18,7 +31,8 @@ from visubrain.io.vmr import VMRFile
 
 class Converter:
     """
-    Utility class to convert between different neuroimaging file formats (VMR, NIfTI, VOI, TRK, TCK, FBR).
+    Utility class to convert between different neuroimaging file formats
+    (VMR, NIfTI, VOI, TRK, TCK, FBR).
 
     Handles conversions, manages file extension detection and provides multiple private methods
     for each specific conversion.
@@ -40,7 +54,8 @@ class Converter:
         Args:
             input_file (str): Path to the input file.
             output_file (str): Path to the output file.
-            anatomical_ref (str, optional): Anatomical reference, required for some formats (e.g., tck, fbr).
+            anatomical_ref (str, optional): Anatomical reference, required for some formats
+            (e.g., tck, fbr).
         """
         self.input = input_file
         self.output = output_file
@@ -52,16 +67,16 @@ class Converter:
         self._validate_extensions()
 
     _CONVERTERS = {
-        ('trk','fbr'): '_trk_to_fbr',
-        ('fbr','trk'): '_fbr_to_trk',
-        ('trk','tck'): '_trk_to_tck',
-        ('tck','trk'): '_tck_to_trk',
-        ('voi', 'nii'): '_voi_to_nii',
-        ('voi', 'nii.gz'): '_voi_to_nii_gz',
-        ('nii', 'voi'): '_nii_to_voi',
-        ('nii.gz', 'voi'): '_nii_gz_to_voi',
-        ('vmr', 'nii'): '_vmr_to_nii',('vmr', 'nii.gz'): '_vmr_to_nii',
-        ('nii', 'vmr'): '_nii_to_vmr',('nii.gz', 'vmr'): '_nii_to_vmr'
+        ('trk','fbr'): 'trk_to_fbr',
+        ('fbr','trk'): 'fbr_to_trk',
+        ('trk','tck'): 'trk_to_tck',
+        ('tck','trk'): 'tck_to_trk',
+        ('voi', 'nii'): 'voi_to_nii',
+        ('voi', 'nii.gz'): 'voi_to_nii_gz',
+        ('nii', 'voi'): 'nii_to_voi',
+        ('nii.gz', 'voi'): 'nii_gz_to_voi',
+        ('vmr', 'nii'): 'vmr_to_nii',('vmr', 'nii.gz'): 'vmr_to_nii',
+        ('nii', 'vmr'): 'nii_to_vmr',('nii.gz', 'vmr'): 'nii_to_vmr'
     }
 
     def _validate_extensions(self):
@@ -86,14 +101,14 @@ class Converter:
             method_name = self._CONVERTERS[(self.in_ext, self.out_ext)]
             getattr(self, method_name)()
         except Exception as e :
-            raise ValueError(f"Conversion {self.in_ext} to {self.out_ext} \n {e}")
+            raise ValueError(f"Conversion {self.in_ext} to {self.out_ext} \n {e}") from e
 
-    def _trk_to_tck(self):
+    def trk_to_tck(self):
         """Convert a .trk tractography file to .tck format."""
         sft = load_tractogram(str(self.input), 'same')
         save_tractogram(sft, str(self.output))
 
-    def _tck_to_trk(self):
+    def tck_to_trk(self):
         """
         Convert a .tck tractography file to .trk format.
 
@@ -105,7 +120,7 @@ class Converter:
         sft = load_tractogram(self.input, self.anatomical_ref)
         save_tractogram(sft, self.output)
 
-    def _vmr_to_nii(self):
+    def vmr_to_nii(self):
         """
         Convert a VMR file to NIfTI (.nii) format.
 
@@ -114,49 +129,51 @@ class Converter:
         """
         try:
             header, data = read_vmr(self.input)
-            print(header)
 
-            colDirX = header["ColDirX"]
-            colDirY = header["ColDirY"]
-            colDirZ = header["ColDirZ"]
-            colDir = np.array([colDirX, colDirY, colDirZ])
+            col_dir = np.array([header["ColDirX"],
+                                header["ColDirY"],
+                                header["ColDirZ"]])
 
-            rowDirX = header["RowDirX"]
-            rowDirY = header["RowDirY"]
-            rowDirZ = header["RowDirZ"]
-            rowDir = np.array([rowDirX, rowDirY, rowDirZ])
+            row_dir = np.array([header["RowDirX"],
+                                header["RowDirY"],
+                                header["RowDirZ"]])
 
-            normal = np.cross(rowDir, colDir)
-
-            ImageOrientationDCM = np.column_stack((rowDir, colDir, normal))
+            image_orientation_dcm = np.column_stack((row_dir,
+                                                     col_dir,
+                                                     np.cross(row_dir, col_dir)))
 
             # volume center position
-            Slice1Center = np.array([header["Slice1CenterX"], header["Slice1CenterY"], header["Slice1CenterZ"]])
-            SliceNCenter = np.array([header["SliceNCenterX"], header["SliceNCenterY"], header["SliceNCenterZ"]])
-            ImagePositionCentreDCM = (Slice1Center + SliceNCenter) / 2
+            slice1_center = np.array([header["Slice1CenterX"],
+                                      header["Slice1CenterY"],
+                                      header["Slice1CenterZ"]])
+            slice_n_center = np.array([header["SliceNCenterX"],
+                                       header["SliceNCenterY"],
+                                       header["SliceNCenterZ"]])
+            image_position_center_dcm = (slice1_center + slice_n_center) / 2
 
             # 4x4 matrix world (dicom) to patient
-            PixelSpacingDCM = np.array([header["VoxelSizeX"], header["VoxelSizeY"], header["VoxelSizeZ"]])# voxels size (mm)
+            pixel_spacing_dcm = np.array([header["VoxelSizeX"],
+                                          header["VoxelSizeY"],
+                                          header["VoxelSizeZ"]])# voxels size (mm)
             dcm_to_patient = np.eye(4)
-            dcm_to_patient[:3, :3] = ImageOrientationDCM * PixelSpacingDCM.reshape(1, 3)
-            dcm_to_patient[:3, 3] = ImagePositionCentreDCM
+            dcm_to_patient[:3, :3] = image_orientation_dcm * pixel_spacing_dcm.reshape(1, 3)
+            dcm_to_patient[:3, 3] = image_position_center_dcm
 
             # center of the volume to corner (voxel origin)
-            DimX, DimY, DimZ = header["DimX"], header["DimY"], header["DimZ"]
-            ShiftCenter = np.eye(4)
-            ShiftCenter[0, 3] = -(DimX + 1) / 2
-            ShiftCenter[1, 3] = -(DimY + 2) / 2
-            ShiftCenter[2, 3] = -(DimZ + 2) / 2
+            shift_center = np.eye(4)
+            shift_center[0, 3] = -(header["DimX"] + 1) / 2
+            shift_center[1, 3] = -(header["DimY"] + 2) / 2
+            shift_center[2, 3] = -(header["DimZ"] + 2) / 2
             # shift center to corner
-            dcm_to_patient = np.dot(dcm_to_patient, ShiftCenter)
+            dcm_to_patient = np.dot(dcm_to_patient, shift_center)
 
-            patient_to_ras = np.diag([-1, -1, 1, 1]) # (flip X et Y)
-            Voxel2World = np.dot(patient_to_ras, dcm_to_patient)
+            # np.diag([-1, -1, 1, 1]) = patient_to_ras = (flip X et Y)
+            voxel2world = np.dot(np.diag([-1, -1, 1, 1]), dcm_to_patient)
 
-            if np.all(Voxel2World[:3, :3] == 0):
-                Voxel2World = np.eye(4)
+            if np.all(voxel2world[:3, :3] == 0):
+                voxel2world = np.eye(4)
 
-            nii = nib.Nifti1Image(data, affine=Voxel2World)
+            nii = nib.Nifti1Image(data, affine=voxel2world)
             nii.header["pixdim"][1] = header["VoxelSizeX"]
             nii.header["pixdim"][2] = header["VoxelSizeY"]
             nii.header["pixdim"][3] = header["VoxelSizeZ"]
@@ -164,10 +181,10 @@ class Converter:
             nii.header["dim"][3] = header["DimY"]
             nii.header["dim"][1] = header["DimZ"]
             nib.save(nii, self.output)
-        except:
-            raise ValueError("Error while converting the VMR file.")
+        except Exception as exc:
+            raise ValueError("Error while converting the VMR file.") from exc
 
-    def _nii_to_vmr(self):
+    def nii_to_vmr(self):
         """
         Convert a NIfTI (.nii) file to VMR format.
 
@@ -175,36 +192,36 @@ class Converter:
             ValueError: If the input file is not a valid NIfTI file.
         """
         try:
-            vmr_obj = VMRFile
+            vmr_obj = VMRFile()
             vmr_obj.write_from_nifti(self.input, self.output)
-        except:
-            raise ValueError("The input file is not a valid Nifti file.")
+        except Exception as exc:
+            raise ValueError("The input file is not a valid Nifti file.") from exc
 
-    def _voi_to_nii(self):
+    def voi_to_nii(self):
         """Convert a VOI (gzipped) file to uncompressed NIfTI (.nii)."""
         with gzip.open(self.input, 'rb') as f_in:
             with open(self.output, 'wb') as f_out:
                 shutil.copyfileobj(f_in, f_out)
 
-    def _voi_to_nii_gz(self):
+    def voi_to_nii_gz(self):
         """Copy a VOI file to a NIfTI compressed format (.nii.gz)."""
         shutil.copy(self.input, self.output)
 
-    def _nii_to_voi(self):
+    def nii_to_voi(self):
         """Convert a NIfTI (.nii) file to gzipped VOI format."""
         with open(self.input, 'rb') as f_in:
             with gzip.open(self.output, 'wb') as f_out:
                 shutil.copyfileobj(f_in, f_out)
 
-    def _nii_gz_to_voi(self):
+    def nii_gz_to_voi(self):
         """Copy a gzipped NIfTI file (.nii.gz) to VOI format."""
         shutil.copy(self.input, self.output)
 
-    def _trk_to_fbr(self):
+    def trk_to_fbr(self):
         """Convert a .trk tractography file to .fbr format."""
         tracto_obj = Tractography(str(self.input), 0)
 
-        points, colors, connectivity = tracto_obj.get_color_points(show_points=False)
+        _, colors, _ = tracto_obj.get_color_points(show_points=False)
 
         header, fibers = self._prepare_fbr_data_from_trk(tracto_obj.get_streamlines(), colors)
         new_fbr = BinaryFbrFile()
@@ -252,7 +269,7 @@ class Converter:
         }
         return header, fibers
 
-    def _fbr_to_trk(self):
+    def fbr_to_trk(self):
         """
         Convert a .fbr fiber bundle file to .trk tractography format.
 
@@ -311,7 +328,7 @@ class Converter:
         affine = img.affine
         center_voxel = shape / 2.0
         center_mm = nib.affines.apply_affine(affine, center_voxel)
-        scale = np.sign(np.diag(affine)[:3])
+        #scale = np.sign(np.diag(affine)[:3])
         streamlines_corr = [sl + center_mm for sl in streamlines]
         return streamlines_corr
 

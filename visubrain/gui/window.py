@@ -1,11 +1,25 @@
-# visubrain/gui/window.py
+"""
+visubrain/gui/window.py
+
+Main GUI module for the VisuBrain application.
+
+This module defines the WindowApp class, which implements the main application window
+for VisuBrain. It manages all user interface elements, session handling, data loading
+(anatomical volumes and tractography), as well as the integration of the main viewer and
+converter. The window supports multiple sessions, advanced visualization controls,
+and user workflows for neuroimaging data exploration and file format conversion.
+
+Classes:
+    WindowApp: Main application window for VisuBrain, managing GUI logic and workflow.
+"""
+
 
 from pathlib import Path
 
 from PyQt6.QtWidgets import (
     QWidget, QVBoxLayout, QTabWidget, QFileDialog, QPushButton, QLabel,
-    QHBoxLayout, QSlider, QLineEdit, QComboBox, QCheckBox, QMenuBar, QMenu, QMessageBox, QDialog, QTextEdit,
-    QDialogButtonBox
+    QHBoxLayout, QSlider, QLineEdit, QComboBox, QCheckBox, QMenuBar, QMenu,
+    QMessageBox, QDialog, QTextEdit, QDialogButtonBox
 )
 from PyQt6.QtCore import Qt
 from PyQt6.QtGui import QAction
@@ -22,22 +36,25 @@ class WindowApp(QWidget):
     """
     Main application window for VisuBrain, orchestrating all GUI logic.
 
-    This window coordinates the interaction between user actions (file loading, visualization mode changes, etc.),
-    the anatomical and tractography data (NiftiFile, Tractography), and the 3D viewer (PyVistaViewer).
-    It allows for multi-session support, synchronized GUI controls (slice, zoom, mode), and provides entry points
-    for all main VisuBrain workflows: viewing, converting, and reporting on data.
+    This window coordinates the interaction between user actions (file loading, visualization mode
+     changes, etc.), the anatomical and tractography data (NiftiFile, Tractography), and the 3D
+      viewer (PyVistaViewer).
+    It allows for multi-session support, synchronized GUI controls (slice, zoom, mode), and provides
+     entry points for all main VisuBrain workflows: viewing, converting, and reporting on data.
 
     Attributes:
         _main_layout (QVBoxLayout): The main vertical layout.
         _viewer (PyVistaViewer): 3D/2D anatomical and tractography viewer widget.
-        _sessions (list of Session): All user-created sessions, each holding a unique dataset and state.
+        _sessions (list of Session): All user-created sessions, each holding a unique dataset and
+         state.
         _current_session (Session or None): Currently selected session.
         _tabs (QTabWidget): Main tab container (Viewer, Converter, etc.).
         _visualization_tab (QWidget): Main tab for the viewer.
         _left_control_panel (QVBoxLayout): Panel for viewer controls (slice, mode, opacity).
         _right_control_panel (QVBoxLayout): Panel for viewer controls (zoom, reset).
         slice_controls (dict): Orientation to SliceControl mapping for slice navigation.
-        tracto_checkboxes (dict): Mapping of (session, file_path) to tractography visibility checkbox.
+        tracto_checkboxes (dict): Mapping of (session, file_path) to tractography visibility
+        checkbox.
     """
 
     def __init__(self):
@@ -65,7 +82,8 @@ class WindowApp(QWidget):
         """
         Build the main menu bar (File, Statistics, About), connecting to all application actions.
 
-        The menu enables file loading (NIfTI, tractography), screenshots, statistics, and license view.
+        The menu enables file loading (NIfTI, tractography), screenshots, statistics, and license
+        view.
         """
         menu_bar = QMenuBar(self)
         self._main_layout.setMenuBar(menu_bar)
@@ -162,7 +180,6 @@ class WindowApp(QWidget):
         # Contrôles des sliders
         for orientation in ["Axial", "Coronal", "Sagittal"]:
             h_layout = QHBoxLayout()
-            label = QLabel(orientation)
             slider = QSlider(Qt.Horizontal)
             input_box = QLineEdit()
             input_box.setFixedWidth(50)
@@ -171,7 +188,7 @@ class WindowApp(QWidget):
             control.connect_slider_callback(self.change_slices_position)
             self.slice_controls[orientation] = control
 
-            h_layout.addWidget(label)
+            h_layout.addWidget(QLabel(orientation))
             h_layout.addWidget(slider)
             h_layout.addWidget(input_box)
             self._left_control_panel.addLayout(h_layout)
@@ -238,8 +255,10 @@ class WindowApp(QWidget):
         self.reset_view_button.clicked.connect(self.reset_cam_zoom)
         self._right_control_panel.addWidget(self.reset_view_button)
 
-        viz_layout.addLayout(self._left_control_panel, stretch=1) # 20% de l'espace pour le control panel
-        viz_layout.addWidget(self._viewer, stretch=4)  # 80% de l'espace pour le viewer
+        # 20% de l'espace pour le control panel
+        viz_layout.addLayout(self._left_control_panel, stretch=1)
+        # 80% de l'espace pour le viewer
+        viz_layout.addWidget(self._viewer, stretch=4)
         viz_layout.addLayout(self._right_control_panel, stretch=1)
 
         self._visualization_tab.setLayout(viz_layout)
@@ -286,12 +305,14 @@ class WindowApp(QWidget):
         On successful loading, resets or creates a new session, updates all GUI controls,
         and synchronizes the 3D viewer.
         """
-        file_path, _ = QFileDialog.getOpenFileName(self, "Add a volume/anatomical file", "", "(*.nii *.nii.gz)")
+        file_path, _ = QFileDialog.getOpenFileName(self, "Add a volume/anatomical file", "",
+                                                   "(*.nii *.nii.gz)")
         if file_path:
             try:
                 nifti_object = NiftiFile(file_path)
 
-                if not nifti_object: return
+                if not nifti_object:
+                    return
 
                 if len(nifti_object.get_dimensions()) not in (3, 4):
                     QMessageBox.critical(self, "Erreur", "Bad file dimension (only 3D/4D)")
@@ -320,10 +341,12 @@ class WindowApp(QWidget):
                 self._viewer.set_working_nifti_obj(nifti_object)
                 self._set_sliders_values(nifti_object.get_dimensions())
                 self._viewer.render_mode(self.mode_button.currentText())
-                self._set_slice_controls_enabled(self.mode_button.currentText().lower() == "slices")
+                self._set_slice_controls_enabled(self.mode_button.currentText().lower()=="slices")
 
                 for tp in tracto_path_list:
-                    to = Tractography(tp, self._current_session.get_uid(), reference_nifti=nifti_object)
+                    to = Tractography(tp,
+                                      self._current_session.get_uid(),
+                                      reference_nifti=nifti_object)
                     self._current_session.add_tract(to)
                     self._viewer.show_tractogram(to)
                     self.add_tracto_checkbox(tp)
@@ -334,7 +357,8 @@ class WindowApp(QWidget):
 
     def _set_sliders_values(self, dimensions):
         """
-        Set the position and maximum values of all anatomical slice controls based on volume dimensions.
+        Set the position and maximum values of all anatomical slice controls based on volume
+        dimensions.
 
         Args:
             dimensions (tuple): Shape of the loaded NIfTI data.
@@ -345,9 +369,12 @@ class WindowApp(QWidget):
         self._set_sliders_maximum(dimensions)
         x, y, z = dimensions
         for ori, control in self.slice_controls.items():
-            if ori == "Axial": control.set_value((z - 1) // 2)
-            elif ori == "Coronal": control.set_value((y - 1) // 2)
-            elif ori == "Sagittal": control.set_value((x - 1) // 2)
+            if ori == "Axial":
+                control.set_value((z - 1) // 2)
+            elif ori == "Coronal":
+                control.set_value((y - 1) // 2)
+            elif ori == "Sagittal":
+                control.set_value((x - 1) // 2)
 
     def change_slice_opacity(self, value):
         """
@@ -371,11 +398,11 @@ class WindowApp(QWidget):
         """
         Save a screenshot of the current viewer display to a PNG file.
         """
-        fileName, _ = QFileDialog.getSaveFileName(self, "Save screenshot", "", "PNG Files (*.png)")
-        if fileName:
+        filename, _ = QFileDialog.getSaveFileName(self, "Save screenshot", "", "PNG Files (*.png)")
+        if filename:
             try:
-                self._viewer.screenshot(filename=fileName)
-                QMessageBox.information(self, "Screenshot", f"Screenshot saved to: {fileName}")
+                self._viewer.screenshot(filename=filename)
+                QMessageBox.information(self, "Screenshot", f"Screenshot saved to: {filename}")
             except Exception as e:
                 QMessageBox.information(self, "Screenshot", f"Error saving screenshot: {e}")
 
@@ -385,7 +412,8 @@ class WindowApp(QWidget):
 
         Will create a session if necessary and handle multiple tractographies per session.
         """
-        file_path, _ = QFileDialog.getOpenFileName(self, "Add a tractography file", "", "(*.trk *.tck)")
+        file_path, _ = QFileDialog.getOpenFileName(self, "Add a tractography file", "",
+                                                   "(*.trk *.tck)")
         if file_path:
 
             if self._current_session is None:
@@ -393,8 +421,10 @@ class WindowApp(QWidget):
 
             key = (self._current_session.get_uid(), file_path)
             if key in self._viewer.tract_actors:
-                QMessageBox.information(self, "Tracto déjà chargé",
-                                        f"Le fichier « {Path(file_path).name} » est déjà chargé dans cette session.")
+                QMessageBox.information(self,
+                                        "Tracto déjà chargé",
+                                        f"Le fichier « {Path(file_path).name} » est déjà chargé"
+                                        f" dans cette session.")
                 return
 
             try:
@@ -405,7 +435,8 @@ class WindowApp(QWidget):
                 QMessageBox.information(self, "Error loading tractography file", f"{e}")
                 return
 
-            if not tracto_obj: return
+            if not tracto_obj:
+                return
 
             if self._current_session:
                 self._current_session.add_tract(tracto_obj)
@@ -425,7 +456,9 @@ class WindowApp(QWidget):
         This is aggregated using Session.tract_statistics().
         """
         if not self._current_session or not self._current_session.tracts:
-            QMessageBox.information(self, "Tractography Statistics", "No tractography data available")
+            QMessageBox.information(self,
+                                    "Tractography Statistics",
+                                    "No tractography data available")
             return
 
         report_lines = self._current_session.tract_statistics()
@@ -609,7 +642,9 @@ class WindowApp(QWidget):
             if orientation.lower() == "sagittal":
                 control = self.slice_controls[orientation]
                 value = control.get_max() - int(value)
-            self._viewer.schedule_slice_update(orientation.lower(), value, self._current_session.opacity)
+            self._viewer.schedule_slice_update(orientation.lower(),
+                                               value,
+                                               self._current_session.opacity)
 
     def _init_converter_tab(self):
         """
@@ -621,7 +656,8 @@ class WindowApp(QWidget):
 
     def _build_converter_tab(self):
         """
-        Build and layout all controls of the converter tab (input, reference, output, format selection).
+        Build and layout all controls of the converter tab
+        (input, reference, output, format selection).
         """
         converter_layout = QVBoxLayout()
 
@@ -686,7 +722,8 @@ class WindowApp(QWidget):
         """
         Open a file dialog to select an anatomical reference file for conversion.
         """
-        path, _ = QFileDialog.getOpenFileName(self, "Choose an anatomical reference", "", "(*.nii *.nii.gz)")
+        path, _ = QFileDialog.getOpenFileName(self, "Choose an anatomical reference", "",
+                                              "(*.nii *.nii.gz)")
         if path:
             self.ref_edit.setText(path)
 
@@ -694,7 +731,8 @@ class WindowApp(QWidget):
         """
         Open a file dialog to specify the output path and filename for the converted file.
         """
-        path, _ = QFileDialog.getSaveFileName(self, "Save as", "", f"*.{self.out_combo.currentText()}")
+        path, _ = QFileDialog.getSaveFileName(self, "Save as", "",
+                                              f"*.{self.out_combo.currentText()}")
         if path:
             self.output_edit.setText(path)
 

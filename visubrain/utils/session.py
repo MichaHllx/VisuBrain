@@ -1,4 +1,16 @@
-# visubrain/utils/session.py
+"""
+visubrain/utils/session.py
+
+Module for session management in the VisuBrain application.
+
+Defines the Session class for managing user sessions, including loaded anatomical volumes,
+tractography data, visualization state, and statistics. Supports multi-session workflows,
+display parameter saving/restoration, and tractography reporting.
+
+Classes:
+    Session: Represents a VisuBrain session, storing data, display state, and content.
+"""
+
 
 from pathlib import Path
 import numpy as np
@@ -6,7 +18,8 @@ import numpy as np
 
 class Session:
     """
-    Class representing a session of visualization and data, including loaded volume, display state, and tractographies.
+    Class representing a session of visualization and data, including loaded volume, display state,
+     and tractographies.
 
     Attributes:
         display_name (str): Display name of the session.
@@ -71,7 +84,8 @@ class Session:
         """
         Apply the session parameters and data to the viewer.
 
-        Updates the viewer's state to reflect this session's data (volume, tracts, display settings).
+        Updates the viewer's state to reflect this session's data
+        (volume, tracts, display settings).
         """
         v = self.viewer
         if self.volume_obj is not None:

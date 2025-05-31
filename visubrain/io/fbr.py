@@ -1,4 +1,16 @@
-# visubrain/io/fbr.py
+"""
+visubrain/io/fbr.py
+
+Module for reading and writing custom FBR (fiber) binary files in the VisuBrain application.
+
+Provides the BinaryFbrFile class for parsing, loading and exporting tractography data
+stored in the FBR file format, including fiber group information, coordinates, and colors.
+Supports integration with VisuBrain's visualization and session management.
+
+Classes:
+    BinaryFbrFile: Handles parsing and exporting of FBR tractography files.
+"""
+
 
 import struct
 
@@ -81,10 +93,10 @@ class BinaryFbrFile:
 
                     # Read fiber colors (RGB)
                     colors_data = struct.unpack(f'<{3 * num_points}B', f.read(3 * num_points))
-                    r_values = colors_data[:num_points]
-                    g_values = colors_data[num_points:2 * num_points]
-                    b_values = colors_data[2 * num_points:]
-                    fiber['colors'] = list(zip(r_values, g_values, b_values))
+
+                    fiber['colors'] = list(zip(colors_data[:num_points],
+                                               colors_data[num_points:2 * num_points],
+                                               colors_data[2 * num_points:]))
                     fibers.append(fiber)
                 group['fibers'] = fibers
                 self.groups.append(group)
@@ -125,22 +137,28 @@ class BinaryFbrFile:
                     f.write(struct.pack('<I', fiber['NrOfPoints']))
 
                     # Write all X coordinates
-                    f.write(struct.pack(f'<{fiber["NrOfPoints"]}f', *(point[0] for point in fiber['Points'])))
+                    f.write(struct.pack(f'<{fiber["NrOfPoints"]}f',
+                                        *(point[0] for point in fiber['Points'])))
 
                     # Write all Y coordinates
-                    f.write(struct.pack(f'<{fiber["NrOfPoints"]}f', *(point[1] for point in fiber['Points'])))
+                    f.write(struct.pack(f'<{fiber["NrOfPoints"]}f',
+                                        *(point[1] for point in fiber['Points'])))
 
                     # Write all Z coordinates
-                    f.write(struct.pack(f'<{fiber["NrOfPoints"]}f', *(point[2] for point in fiber['Points'])))
+                    f.write(struct.pack(f'<{fiber["NrOfPoints"]}f',
+                                        *(point[2] for point in fiber['Points'])))
 
                     # Write all R colors
-                    f.write(struct.pack(f'<{fiber["NrOfPoints"]}B', *(point[3] for point in fiber['Points'])))
+                    f.write(struct.pack(f'<{fiber["NrOfPoints"]}B',
+                                        *(point[3] for point in fiber['Points'])))
 
                     # Write all G colors
-                    f.write(struct.pack(f'<{fiber["NrOfPoints"]}B', *(point[4] for point in fiber['Points'])))
+                    f.write(struct.pack(f'<{fiber["NrOfPoints"]}B',
+                                        *(point[4] for point in fiber['Points'])))
 
                     # Write all B colors
-                    f.write(struct.pack(f'<{fiber["NrOfPoints"]}B', *(point[5] for point in fiber['Points'])))
+                    f.write(struct.pack(f'<{fiber["NrOfPoints"]}B',
+                                        *(point[5] for point in fiber['Points'])))
 
     def get_fiber_coordinates(self):
         """
@@ -175,4 +193,4 @@ class BinaryFbrFile:
             'Thickness' : ','.join([str(g['thickness']) for g in self.groups]),
             'Visible' : ','.join([str(g['visible']) for g in self.groups])
         }
-        return dico.__str__()
+        return dico

@@ -1,5 +1,17 @@
-# visubrain/io/tractography.py
-import nibabel
+"""
+visubrain/io/tractography.py
+
+Module for loading and managing tractography (streamlines) data in the VisuBrain application.
+
+Provides the Tractography class for reading tractography files (TRK, TCK, FBR), handling
+streamline transformation, color mapping, and integration with NIfTI anatomical references.
+Supports visualization, session-based management, and statistics within VisuBrain.
+
+Classes:
+    Tractography: Handles loading, transformation, and querying of tractography data.
+"""
+
+
 import numpy as np
 
 from dipy.io.streamline import load_tractogram
@@ -47,11 +59,12 @@ class Tractography:
             if self.file_path.endswith(".tck"):
                 if not self.reference_nifti:
                     raise ValueError("A tck file needs an anatomical reference image beforehand.")
-                sf_tracto = load_tractogram(filename=self.file_path, reference=self.reference_nifti.file_path)
+                sf_tracto = load_tractogram(filename=self.file_path,
+                                            reference=self.reference_nifti.file_path)
             else:
                 sf_tracto = load_tractogram(filename=self.file_path, reference='same')
         except Exception as e:
-            raise ValueError(f"Error while loading streamlines: {e}")
+            raise ValueError(f"Error while loading streamlines: {e}") from e
 
         if self.reference_nifti is not None:
             affine = self.reference_nifti.affine

@@ -1,3 +1,19 @@
+"""
+visubrain/gui/viewer.py
+
+Main module for anatomical and tractography visualization in the VisuBrain application.
+
+This module provides the PyVistaViewer class, a 2D/3D visualization widget
+for displaying medical imaging data (NIfTI volumes) and tractography files (TRK, TCK).
+Integrates with the VisuBrain application, offering interactive controls for rendering modes,
+slice navigation, opacity, zoom, tractogram display and session-based workflows.
+
+Classes:
+    PyVistaViewer: Main visualization widget for NIfTI volumes and tractography.
+"""
+
+
+
 import pyvista as pv
 import numpy as np
 
@@ -22,10 +38,13 @@ def _slice_actor_key(file_path: str, axis: str) -> str:
 
 class PyVistaViewer(QtInteractor):
     """
-    3D and slice viewer for medical imaging and tractography, integrated with the VisuBrain application.
+    3D and slice viewer for medical imaging and tractography, integrated with the VisuBrain
+     application.
 
-    This widget is responsible for visualizing anatomical data (NIfTI volumes, 3D or multi-slice) and tractography
-    (streamlines from TRK/TCK/FBR files), and is aware of the VisuBrain data structures (NiftiFile, Tractography, Session).
+    This widget is responsible for visualizing anatomical data (NIfTI volumes, 3D or multi-slice)
+     and tractography
+    (streamlines from TRK/TCK/FBR files), and is aware of the VisuBrain data structures (NiftiFile,
+     Tractography, Session).
 
     Attributes:
         pv_data (pyvista.DataSet): Wrapped image data for visualization.
@@ -117,7 +136,8 @@ class PyVistaViewer(QtInteractor):
 
     def render_mode(self, mode: str, opacity=0.5) -> bool:
         """
-        Display the anatomical data in either 'slices' (2D orthogonal views) or 'volume 3d' (3D rendering) mode.
+        Display the anatomical data in either 'slices' (2D orthogonal views) or 'volume 3d'
+         (3D rendering) mode.
 
         Args:
             mode (str): "slices" or "volume 3d".
@@ -255,7 +275,7 @@ class PyVistaViewer(QtInteractor):
             bool: True if displayed, False otherwise.
         """
         if tracto_obj is None:
-            return
+            return False
 
         sid = tracto_obj.session_id
         key = (sid, tracto_obj.file_path)

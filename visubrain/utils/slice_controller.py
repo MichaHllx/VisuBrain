@@ -1,4 +1,16 @@
-# visubrain/utils/slice_controller.py
+"""
+visubrain/utils/slice_controller.py
+
+Module for slice navigation controls in the VisuBrain application.
+
+Defines the SliceControl class to manage and synchronize slice navigation widgets
+(QSlider and QLineEdit) for different anatomical orientations. Enables interactive
+and synchronized control of slice position, supporting both manual input and slider movement.
+
+Classes:
+    SliceControl: Manages slice position widgets and synchronization for anatomical viewing.
+"""
+
 
 from PyQt6.QtWidgets import QSlider, QLineEdit
 
@@ -90,6 +102,7 @@ class SliceControl:
         Connect a callback function to the slider's valueChanged signal.
 
         Args:
-            func (callable): Function to call on slider value change. Should accept (value, orientation).
+            func (callable): Function to call on slider value change. Should accept
+            (value, orientation).
         """
         self.slider.valueChanged.connect(lambda val: func(val, self.orientation))
