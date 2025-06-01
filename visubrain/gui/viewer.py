@@ -280,7 +280,7 @@ class PyVistaViewer(QtInteractor):
         sid = tracto_obj.session_id
         key = (sid, tracto_obj.file_path)
         if key not in self.tract_actors:
-            points_list, colors_list, connectivity = tracto_obj.get_color_points(show_points)
+            points_list, colors_list, connectivity = tracto_obj.get_color_points(show_points, tracto_obj.streamlines)
             points = np.vstack(points_list)
             colors = np.vstack(colors_list)
             poly = pv.PolyData(points)

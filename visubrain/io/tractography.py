@@ -26,7 +26,7 @@ class Tractography:
         file_path (str): Path to the tractography file.
         reference_nifti: Reference NIfTI object for registration (required for .tck).
         streamlines: List of streamlines in voxel/image space.
-        raw_data: Raw tractogram object loaded by DIPY.
+        sf_t: Raw tractogram object loaded by DIPY.
         session_id: Identifier for the session this tractography belongs to.
     """
 
@@ -41,7 +41,7 @@ class Tractography:
         """
         self.file_path = file_path
         self.reference_nifti = reference_nifti
-        self.streamlines, self.raw_data = self._load_streamlines()
+        self.streamlines, self.sf_t = self._load_streamlines()
         self.session_id = session_id
 
     def _load_streamlines(self):
@@ -83,12 +83,13 @@ class Tractography:
         """
         return self.streamlines
 
-    def get_color_points(self, show_points: bool):
+    def get_color_points(self, show_points: bool, streamlines):
         """
         Compute color mapping for each streamline point, using local tangent.
 
         Args:
             show_points (bool): If True, display as points (for 3D viewer). (not used here)
+            streamlines : Points coordinates to be color associated
 
         Returns:
             tuple: (points_list, colors_list, connectivity)
@@ -103,7 +104,7 @@ class Tractography:
         connectivity = []  # for line display
         offset = 0
 
-        for streamline in self.streamlines:
+        for streamline in streamlines:
             streamline = np.asarray(streamline)
             n_points = streamline.shape[0]
 

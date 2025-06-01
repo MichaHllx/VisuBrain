@@ -1,4 +1,4 @@
-# visubrain/__main__.py
+# visubrain/main.py
 import sys
 from PyQt6.QtWidgets import QApplication
 from visubrain.gui.window import WindowApp

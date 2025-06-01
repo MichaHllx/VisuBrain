@@ -219,16 +219,35 @@ class Converter:
 
     def trk_to_fbr(self):
         """Convert a .trk tractography file to .fbr format."""
-        tracto_obj = Tractography(str(self.input), 0)
 
-        _, colors, _ = tracto_obj.get_color_points(show_points=False)
+        tracto_obj = Tractography(str(self.input), 0, reference_nifti=None)
 
-        header, fibers = self._prepare_fbr_data_from_trk(tracto_obj.get_streamlines(), colors)
+        sf_t: StatefulTractogram = tracto_obj.sf_t
+        dim_mm = sf_t.dimensions * sf_t.voxel_sizes
+
+        origin_mm_pil = [dim_mm[1] / 2, dim_mm[2] / 2, dim_mm[0] / 2]
+
+        # streamlines RAS+ mm
+        streamlines_ras = tracto_obj.get_streamlines()
+
+        # streamlines RAS+ mm --> PIL+ mm  (BVI)
+        streamlines_pil = []
+        for sl in streamlines_ras:
+            # flip axes + axe orient = (x_pil = -y_ras, y_pil = -z_ras, z_pil = -x_ras)
+            sl_pil = np.stack([-sl[:, 1], -sl[:, 2], -sl[:, 0]], axis=1)
+
+            # origin offset
+            sl_pil = sl_pil + origin_mm_pil
+
+            streamlines_pil.append(sl_pil)
+
+        _, colors, _ = tracto_obj.get_color_points(show_points=False, streamlines=streamlines_pil)
+        header, fibers = self._prepare_fbr_data_from_trk(streamlines_pil, colors, origin_mm_pil)
         new_fbr = BinaryFbrFile()
         new_fbr.write_fbr(self.output, header, fibers)
 
     @staticmethod
-    def _prepare_fbr_data_from_trk(streamlines, colors):
+    def _prepare_fbr_data_from_trk(streamlines, colors, origin):
         """
         Prepare the header and fiber data for writing an FBR file from TRK streamlines.
 
@@ -254,11 +273,11 @@ class Converter:
         header = {
             'FileVersion': 5,
             'CoordsType': 2,
-            'FibersOrigin': [128.0, 128.0, 128.0],
+            'FibersOrigin': [origin[0], origin[1], origin[2]],
             'NrOfGroups': 1,
             'Groups': [
                 {
-                    'Name': 'trk_conversion',
+                    'Name': 'trk_conversion_PIL+mm',
                     'Visible': 1,
                     'Animate': -1,
                     'Thickness': 0.3,
@@ -278,76 +297,41 @@ class Converter:
         """
         if self.anatomical_ref is None:
             raise ValueError("A fbr file needs an anatomical reference file.")
+
         fbr_obj = BinaryFbrFile(self.input)
-        ref_img = nib.load(self.anatomical_ref)
+        if fbr_obj.get_header()['CoordsType'] != 2:
+            raise ValueError("Only FBR with BVI coordinates are supported.")
 
-        output_streamlines = self._prepare_trk_data_from_fbr(fbr_obj, ref_img)
+        streamlines = self._prepare_trk_data_from_fbr(fbr_obj)
 
-        tracto = StatefulTractogram(output_streamlines, reference=ref_img, space=Space.RASMM)
-        save_tractogram(tracto, self.output)
+        try:
+            sf_t = StatefulTractogram(streamlines, self.anatomical_ref, space=Space.RASMM)
+            save_tractogram(sf_t, self.output)
+        except Exception as exc:
+            raise ValueError("Problem between the reference anatomy and the fbr file") from exc
 
-    def _prepare_trk_data_from_fbr(self, fbr_obj, ref_img):
+    @staticmethod
+    def _prepare_trk_data_from_fbr(fbr_obj):
         """
         Prepare TRK streamlines from an FBR file object and a NIfTI reference image.
 
         Args:
             fbr_obj (BinaryFbrFile): FBR file object.
-            ref_img (nib.Nifti1Image): Reference NIfTI image.
 
         Returns:
             list: List of valid streamlines.
         """
         streamlines = []
-        data_per_point = {'colors': []}
         for group in fbr_obj.groups:
             for fiber in group['fibers']:
-                pts = np.array(fiber['points'])
-                colors = np.array(fiber['colors'])
-                if pts.shape[0] < 2:
+                if len(fiber['points']) < 2:
                     continue
-                streamlines.append(pts)
-                data_per_point['colors'].append(colors)
 
-        streamlines_corr = self._correct_fbr_to_nifti(streamlines, ref_img)
-        valid_streamlines = self._filter_valid_streamlines(streamlines_corr, ref_img)
+                fbr_pil = np.array(fiber['points'], dtype=np.float32)
+                # flip axes + axe orient = (x_ras = -z_pil, y_ras = -x_pil, z_ras = -y_pil)
+                trk_x, trk_y, trk_z = -fbr_pil[:, 2], -fbr_pil[:, 0], -fbr_pil[:, 1]
 
-        return valid_streamlines
+                streamline_ras_space = np.column_stack((trk_x, trk_y, trk_z))
+                streamlines.append(streamline_ras_space.astype(np.float32))
 
-    def _correct_fbr_to_nifti(self, streamlines, img):
-        """
-        Apply translation/scaling to streamlines to fit NIfTI space.
-
-        Args:
-            streamlines (list): List of streamlines.
-            img (nib.Nifti1Image): Reference image.
-
-        Returns:
-            list: List of corrected streamlines.
-        """
-        shape = np.array(img.shape[:3])
-        affine = img.affine
-        center_voxel = shape / 2.0
-        center_mm = nib.affines.apply_affine(affine, center_voxel)
-        #scale = np.sign(np.diag(affine)[:3])
-        streamlines_corr = [sl + center_mm for sl in streamlines]
-        return streamlines_corr
-
-    def _filter_valid_streamlines(self, streamlines, img):
-        """
-        Filter out streamlines that are not valid in the NIfTI image space.
-
-        Args:
-            streamlines (list): List of streamlines.
-            img (nib.Nifti1Image): Reference image.
-
-        Returns:
-            list: List of valid streamlines.
-        """
-        shape = np.array(img.shape[:3])
-        inv_aff = np.linalg.inv(img.affine)
-        valid = []
-        for sl in streamlines:
-            ijk = nib.affines.apply_affine(inv_aff, sl)
-            if (ijk >= 0).all() and (ijk < shape).all():
-                valid.append(sl)
-        return valid
+        return streamlines

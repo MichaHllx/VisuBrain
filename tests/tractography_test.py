@@ -28,7 +28,7 @@ def test_trk_load(monkeypatch):
     assert t.file_path == "foo.trk"
     assert t.reference_nifti is None
     assert isinstance(t.streamlines, list)
-    assert isinstance(t.raw_data, DummyTractogram)
+    assert isinstance(t.sf_t, DummyTractogram)
     assert t.session_id == 42
 
 def test_tck_load_with_reference(monkeypatch):
@@ -62,7 +62,7 @@ def test_get_color_points_lines(monkeypatch):
     monkeypatch.setattr("visubrain.io.tractography.load_tractogram", dummy_load_tractogram)
     t = Tractography("foo.trk", session_id=1)
     # Un streamline de 3 points
-    pts, colors, conn = t.get_color_points(show_points=False)
+    pts, colors, conn = t.get_color_points(show_points=False, streamlines=t.streamlines)
     assert len(pts) == 1
     assert colors[0].shape == (3,3)
     assert len(conn) == 1
@@ -71,7 +71,7 @@ def test_get_color_points_lines(monkeypatch):
 def test_get_color_points_points(monkeypatch):
     monkeypatch.setattr("visubrain.io.tractography.load_tractogram", dummy_load_tractogram)
     t = Tractography("foo.trk", session_id=1)
-    pts, colors, conn = t.get_color_points(show_points=True)
+    pts, colors, conn = t.get_color_points(show_points=True, streamlines=t.streamlines)
     assert len(conn) == 0  # pas de connectivité
 
 def test_get_color_points_single_point(monkeypatch):
@@ -79,7 +79,7 @@ def test_get_color_points_single_point(monkeypatch):
         return DummyTractogram([np.array([[1,2,3]])])
     monkeypatch.setattr("visubrain.io.tractography.load_tractogram", single_point_loader)
     t = Tractography("foo.trk", session_id=1)
-    pts, colors, conn = t.get_color_points(show_points=False)
+    pts, colors, conn = t.get_color_points(show_points=False, streamlines=t.streamlines)
     assert (colors[0] == np.array([[255,255,255]], dtype=np.uint8)).all()
     assert conn[0][0] == 1
 
@@ -89,6 +89,6 @@ def test_get_color_points_zero_norm(monkeypatch):
         return DummyTractogram([np.array([[1,1,1],[1,1,1]])])
     monkeypatch.setattr("visubrain.io.tractography.load_tractogram", zero_norm_loader)
     t = Tractography("foo.trk", session_id=1)
-    pts, colors, conn = t.get_color_points(show_points=False)
+    pts, colors, conn = t.get_color_points(show_points=False, streamlines=t.streamlines)
     assert (colors[0][0] == [0,0,0]).all()
     assert (colors[0][1] == [0,0,0]).all()

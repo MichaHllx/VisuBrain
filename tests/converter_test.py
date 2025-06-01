@@ -298,7 +298,8 @@ def test_vmr_to_nii_error(monkeypatch):
 def test_trk_to_fbr(monkeypatch):
     c = Converter("data/NT1_uf_right.trk", "b.fbr")
     class DummyTracto:
-        def get_color_points(self, show_points): return None, [[[1,2,3]]], None
+        d = []
+        def get_color_points(self, show_points, d): return None, [[[1,2,3]]], None
         def get_streamlines(self): return [[[0,0,0],[1,1,1]]]
     monkeypatch.setattr("visubrain.io.tractography.Tractography", lambda a, b: DummyTracto())
     class DummyFbr:
