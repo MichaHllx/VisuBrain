@@ -1,4 +1,3 @@
-import pytest
 import numpy as np
 from visubrain.utils.session import Session
 

@@ -1,5 +1,5 @@
 import pytest
-from unittest.mock import MagicMock, patch
+from unittest.mock import patch
 import numpy as np
 
 from visubrain.io.vmr import VMRFile
@@ -79,4 +79,3 @@ def test_voxel_size_extraction():
         m_nib.as_closest_canonical.return_value = fake_nii
         m_create_vmr.return_value = ({}, np.zeros((64,128,32), dtype=np.ubyte))
         v.write_from_nifti("input.nii", "out.vmr")
-
