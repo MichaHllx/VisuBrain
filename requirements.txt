@@ -1,0 +1,9 @@
+bvbabel @ git+https://github.com/nausikaa8/bvbabel.git@e548670809c4cb0465aeb704fc1359a54e11a4c4
+dipy==1.11.0
+nibabel==5.3.2
+numpy==2.2.6
+PyQt6==6.8.1
+PyQt6-Qt6==6.8.2
+PyQt6_sip==13.10.0
+pyvista==0.44.1
+pyvistaqt==0.11.2
