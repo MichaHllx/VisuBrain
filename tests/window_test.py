@@ -4,8 +4,6 @@ from pathlib import Path
 import pytest
 from unittest.mock import MagicMock, patch
 from PyQt6.QtWidgets import QApplication, QDialog, QMessageBox, QCheckBox
-from visubrain.io.nifti import NiftiFile
-from visubrain.io.tractography import Tractography
 
 from visubrain.io.nifti import NiftiFile
 
@@ -14,8 +12,6 @@ def test_windowapp_launch(qtbot):
     window = WindowApp()
     qtbot.addWidget(window)
     window.show()
-    assert window.isVisible()
-    assert hasattr(window, "_viewer")
     assert window.isVisible()
     assert hasattr(window, "_viewer")
     assert window.windowTitle() == "VisuBrain"

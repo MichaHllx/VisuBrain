@@ -131,7 +131,7 @@ def test_trk_to_tck_conversion(tmp_path):
         img = nib.streamlines.load(str(tck_file))
         assert img.streamlines is not None
     except Exception as e:
-        pytest.fail(f"Bad trk file: {e}")
+        pytest.fail(e)
 
 def test_voi_to_nii_gz(tmp_path):
     voi_file = "data/temp.voi"
