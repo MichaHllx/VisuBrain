@@ -200,6 +200,10 @@ class PyVistaViewer(QtInteractor):
             self.remove_actor(actor)
         self.tract_actors.clear()
 
+        if hasattr(self, 'roi_actors'):
+            for actor in self.roi_actors.values():
+                self.remove_actor(actor)
+            self.roi_actors.clear()
         self.render()
 
     def hide_all_actors(self):
@@ -310,15 +314,37 @@ class PyVistaViewer(QtInteractor):
         self.render()
         return True
 
+    def show_roi(self, nifti_obj, color=(1,0,0), opacity=0.3):
+        """
+        Add a superposed ROI binary mask to the viewer.
+        """
+        data = nifti_obj.get_data()
+        grid = pv.wrap(data)
+        try:
+            contour = grid.threshold(0.5)
+            actor = self.add_mesh(contour, color=color, opacity=opacity, show_scalar_bar=False)
+            if not hasattr(self, 'roi_actors'):
+                self.roi_actors = {}
+            self.roi_actors[nifti_obj.file_path] = actor
+            self.render()
+        except Exception:
+            pass
+
     def set_file_visibility(self, file_path, visible, session_id):
         """
-        Show or hide a specific tractography actor by file path and session.
+        Show or hide a specific actor by file path and session.
 
         Args:
-            file_path (str): Path to the tractography file (TRK/TCK/FBR).
+            file_path (str): Path to the tractography file (TRK/TCK).
             visible (bool): Whether the actor should be visible.
             session_id (int): Identifier for the session in which the tract is loaded.
         """
+        if hasattr(self, 'roi_actors'):
+            actor = self.roi_actors.get(file_path)
+            if actor:
+                actor.SetVisibility(visible)
+                self.render()
+
         key = (session_id, file_path)
         actor = self.tract_actors.get(key)
         if actor:

@@ -19,7 +19,7 @@ from pathlib import Path
 from PyQt6.QtWidgets import (
     QWidget, QVBoxLayout, QTabWidget, QFileDialog, QPushButton, QLabel,
     QHBoxLayout, QSlider, QLineEdit, QComboBox, QCheckBox, QMenuBar, QMenu,
-    QMessageBox, QDialog, QTextEdit, QDialogButtonBox
+    QMessageBox, QDialog, QTextEdit, QDialogButtonBox, QColorDialog
 )
 from PyQt6.QtCore import Qt
 from PyQt6.QtGui import QAction
@@ -100,6 +100,10 @@ class WindowApp(QWidget):
         load_trk_action = QAction("Add a tractography file (.trk, .tck)", self)
         load_trk_action.triggered.connect(self._on_load_streamlines)
         file_menu.addAction(load_trk_action)
+            # Action pour load un fichier roi
+        load_roi_action = QAction("Add ROI (.nii, .nii.gz)", self)
+        load_roi_action.triggered.connect(self._on_load_roi)
+        file_menu.addAction(load_roi_action)
             # action pour prendre un screenshot
         screenshot_action = QAction("Take a screenshot", self)
         screenshot_action.triggered.connect(self.take_screenshot)
@@ -449,6 +453,38 @@ class WindowApp(QWidget):
             self._viewer.show_tractogram(tracto_obj)
             self.add_tracto_checkbox(file_path)
 
+    def _on_load_roi(self):
+        """
+        Open a file dialog to load a roi file (.nii or .nii.gz) into the current session.
+        """
+        path, _ = QFileDialog.getOpenFileName(self, "Add ROI", "", "(*.nii *.nii.gz)")
+        if not path or not self._current_session:
+            return
+        try:
+            roi_obj = NiftiFile(path)
+
+            # color selection
+            qcolor = QColorDialog.getColor(initial=Qt.red, title="Choose ROI color")
+            if not qcolor.isValid():
+                color = (1.0, 0.0, 0.0)  # default : red
+            else:
+                color = (qcolor.redF(), qcolor.greenF(), qcolor.blueF())
+
+            self._current_session.add_roi(roi_obj)
+            self._viewer.show_roi(roi_obj, color=color, opacity=0.3)
+
+            sid = self._current_session.get_uid()
+            cb = QCheckBox(f"ROI: {Path(path).name}")
+            cb.setChecked(True)
+            cb.stateChanged.connect(
+                lambda state, f=path: self._viewer.set_file_visibility(f, state == 2, sid)
+            )
+            cb.roi_path = path
+            self.tracto_checkboxes[(sid, path)] = cb
+            self._left_control_panel.addWidget(cb)
+        except Exception:
+            QMessageBox.critical(self, "Error", "Error loading ROI")
+
     def view_tracts_statistics(self):
         """
         Show statistics report (number and length) for all tractographies in the current session.
@@ -488,17 +524,24 @@ class WindowApp(QWidget):
         Args:
             selected_label (str): Display label of the session to activate.
         """
-        # on save l'état de la current sess
+        # 1. Delete current checkboxes
+        for cb in list(self.tracto_checkboxes.values()):
+            self._left_control_panel.removeWidget(cb)
+            cb.deleteLater()
+        self.tracto_checkboxes.clear()
+
+        # 2. save and clean current sess
         self._save_current_session_state()
         self._viewer.clear_previous_actors()
 
-        session = next((f for f in self._sessions if f.display_name == selected_label), None)
-        if not session: return
+        # 3. apply new sess
+        session = next((s for s in self._sessions if s.display_name == selected_label), None)
+        if not session:
+            return
         self._current_session = session
-        # màj viewer avec session
         session.apply()
 
-        # màj UI avec session
+        # 4. controllers update
         if session.volume_obj is not None:
             self._set_sliders_maximum(session.volume_obj.get_dimensions())
             for ori, control in self.slice_controls.items():
@@ -509,11 +552,32 @@ class WindowApp(QWidget):
             self.mode_button.setCurrentText(session.rendering_mode)
             self._set_slice_controls_enabled(session.rendering_mode.lower() == "slices")
 
-        if self.tracto_checkboxes:
-            for (sid, file_path), checkbox in self.tracto_checkboxes.items():
-                visible = (checkbox.associated_session == selected_label) and checkbox.isChecked()
-                self._viewer.set_file_visibility(file_path, visible, session_id=sid)
-                checkbox.setVisible(checkbox.associated_session == selected_label)
+        # 5. new tract checkboxes
+        sid = session.get_uid()
+        for path in session.tracts.keys():
+            cb = QCheckBox(f"Tractography: {Path(path).name}")
+            cb.setChecked(True)
+            cb.session_id = sid
+            cb.file_path = path
+            cb.stateChanged.connect(
+                lambda state, f=path, sid=cb.session_id:
+                self._viewer.set_file_visibility(f, state == 2, session_id=sid)
+            )
+            self.tracto_checkboxes[(sid, path)] = cb
+            self._left_control_panel.addWidget(cb)
+
+        # 6. new ROI checkboxes
+        for path in session.rois.keys():
+            cb = QCheckBox(f"ROI: {Path(path).name}")
+            cb.setChecked(True)
+            cb.session_id = sid
+            cb.file_path = path
+            cb.stateChanged.connect(
+                lambda state, f=path:
+                self._viewer.set_file_visibility(f, state == 2, sid)
+            )
+            self.tracto_checkboxes[(sid, path)] = cb
+            self._left_control_panel.addWidget(cb)
 
     def _save_current_session_state(self):
         """

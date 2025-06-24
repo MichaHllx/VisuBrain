@@ -61,6 +61,7 @@ class Session:
 
         # Content management
         self.tracts = {}    # {file_path: tracto_obj}
+        self.rois = {}  # {file_path: NiftiFile}
 
     def add_tract(self, tracto_obj):
         """
@@ -70,6 +71,12 @@ class Session:
             tracto_obj: Tractography object to add.
         """
         self.tracts[tracto_obj.file_path] = tracto_obj
+
+    def add_roi(self, roi_obj):
+        """
+        Add a ROI NIfTI object to the session.
+        """
+        self.rois[roi_obj.file_path] = roi_obj
 
     def get_uid(self):
         """
@@ -94,6 +101,9 @@ class Session:
 
         for tract in self.tracts.values():
             v.show_tractogram(tract, show_points=False)
+
+        for roi in self.rois.values():
+            v.show_roi(roi, color=(1.0, 0.0, 0.0), opacity=0.3)
 
     def tract_statistics(self):
         """
